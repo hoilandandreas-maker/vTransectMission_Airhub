@@ -1,0 +1,33 @@
+{
+  "source": {
+    "filename": "Untitled.fig",
+    "nodeCount": 302,
+    "pages": [
+      {
+        "id": "0:1",
+        "name": "Page 1",
+        "selected": true
+      },
+      {
+        "id": "2:2",
+        "name": "Page 2",
+        "selected": true
+      }
+    ],
+    "userSelectedFrames": [
+      "/Page-1/airhub-design-system-1"
+    ]
+  },
+  "components": [],
+  "tokens": {
+    "count": 0,
+    "modes": [
+      "default"
+    ]
+  },
+  "styles": {
+    "text": 0,
+    "effect": 0
+  },
+  "warnings": []
+}

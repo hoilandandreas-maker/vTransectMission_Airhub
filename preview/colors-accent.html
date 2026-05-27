@@ -1,0 +1,24 @@
+<!doctype html><meta charset="utf-8">
+<title>Accent</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="_base.css">
+<style>
+  .row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .swatch {
+    border-radius: var(--radius-lg);
+    aspect-ratio: 5/2;
+    padding: 14px 16px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    color: white;
+  }
+  .swatch .name { font: var(--t-label); letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.95;}
+  .swatch .hex  { font: var(--t-small); opacity: 0.85; font-variant-numeric: tabular-nums; }
+</style>
+<body><div class="card">
+  <div class="eyebrow">Accent · action color</div>
+  <div class="row">
+    <div class="swatch" style="background:#1a7cba"><span class="name">accent/primary</span><span class="hex">#1a7cba — buttons, focus, active nav</span></div>
+    <div class="swatch" style="background:#4eadea"><span class="name">accent/light</span><span class="hex">#4eadea — links, highlights, leading dot</span></div>
+  </div>
+</div></body>

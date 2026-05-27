@@ -1,0 +1,25 @@
+/* Shared preview-card base. Each card links this in addition to colors_and_type.css */
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font: var(--t-body);
+  overflow: hidden;
+}
+.card {
+  box-sizing: border-box;
+  padding: 20px 24px;
+  width: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.eyebrow {
+  font: var(--t-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}

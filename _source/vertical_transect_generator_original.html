@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Vertical Transect Mission Generator</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 20px auto; padding: 0 16px; color: #222; }
+  #map { height: 380px; width: 100%; border: 1px solid #ccc; border-radius: 6px; }
+  #profile { width: 100%; height: 260px; border: 1px solid #ccc; border-radius: 6px; background: #fafafa; }
+  .viz { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+  @media (max-width: 800px) { .viz { grid-template-columns: 1fr; } }
+  h1 { font-size: 1.4rem; }
+  fieldset { border: 1px solid #ccc; border-radius: 6px; margin-bottom: 14px; padding: 10px 14px; }
+  legend { font-weight: 600; padding: 0 6px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+  label { display: flex; flex-direction: column; font-size: 0.85rem; gap: 2px; }
+  input[type=number] { padding: 6px; font-size: 0.95rem; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  button { padding: 8px 14px; font-size: 0.95rem; cursor: pointer; border: 1px solid #444; background: #f5f5f5; border-radius: 4px; }
+  button.primary { background: #2b7; color: #fff; border-color: #195; }
+  textarea { width: 100%; height: 360px; font-family: monospace; font-size: 0.78rem; }
+  .info { font-size: 0.85rem; color: #555; margin-top: 4px; }
+  .summary { background: #eef5ff; padding: 8px 10px; border-radius: 4px; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+
+<h1>Vertical Transect Mission Generator</h1>
+<p class="info">Generates a JSON mission (takeOff → fixed-heading waypoints → landing) that matches the A↔B zig-zag pattern from the reference KML. All processing is local; nothing leaves your browser.</p>
+
+<fieldset>
+  <legend>Point A</legend>
+  <div class="grid">
+    <label>Latitude<input type="number" step="any" id="aLat" value="58.91944655661257"></label>
+    <label>Longitude<input type="number" step="any" id="aLon" value="5.735056039452445"></label>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>Point B</legend>
+  <div class="grid">
+    <label>Latitude<input type="number" step="any" id="bLat" value="58.91928146032262"></label>
+    <label>Longitude<input type="number" step="any" id="bLon" value="5.736448455815037"></label>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>POI (point of interest — the asset the drone faces)</legend>
+  <div class="grid">
+    <label>Latitude<input type="number" step="any" id="poiLat" value="58.91900000"></label>
+    <label>Longitude<input type="number" step="any" id="poiLon" value="5.735750000"></label>
+  </div>
+  <p class="info">Tip: click anywhere on the map below to set the POI.</p>
+</fieldset>
+
+<fieldset>
+  <legend>Altitudes</legend>
+  <div class="grid">
+    <label>Ground elevation (m AMSL)<input type="number" step="any" id="ground" value="0"></label>
+    <label>Min AGL (m)<input type="number" min="0" step="10" id="minAlt" value="10"></label>
+    <label>Max AGL (m)<input type="number" min="10" step="10" id="maxAlt" value="60"></label>
+    <label>Ascending step (m)<input type="number" step="any" id="upStep" value="10"></label>
+  </div>
+  <p class="info">Output altitudes are absolute MSL = ground elevation + AGL. Min/Max altitude is restricted to 10 m increments. Descent uses the same step as ascent but offset by half a step, so descent altitudes fall between ascent altitudes (e.g. up 10/20/30…/60 → down 55/45/35/…).</p>
+</fieldset>
+
+<fieldset>
+  <legend>Flight</legend>
+  <div class="grid">
+    <label>Speed (m/s)<input type="number" step="any" id="speed" value="2.0"></label>
+    <label>Heading (° from North)<input type="number" step="any" id="heading"></label>
+    <label>Takeoff / land at
+      <select id="startSide">
+        <option value="A" selected>Point A</option>
+        <option value="B">Point B</option>
+      </select>
+    </label>
+  </div>
+  <div class="row">
+    <button id="recalcHeading">Recalculate heading (perpendicular toward POI)</button>
+    <span class="info" id="bearingInfo"></span>
+  </div>
+</fieldset>
+
+<div class="row">
+  <button class="primary" id="download">Download mission.json</button>
+  <span class="summary" id="summary"></span>
+</div>
+
+<h3>Visualisation</h3>
+<div class="viz">
+  <div>
+    <div id="map"></div>
+    <p class="info">Top view · A (green) · B (red) · transect line · ▲ POI · arrow = drone facing direction. Click map to set POI.</p>
+  </div>
+  <div>
+    <svg id="profile" viewBox="0 0 600 260" preserveAspectRatio="none"></svg>
+    <p class="info">Side profile · altitude (m AGL) over the A↔B distance. Ascent = blue, descent = orange.</p>
+  </div>
+</div>
+
+<h3>JSON preview</h3>
+<textarea id="output" readonly></textarea>
+
+<script>
+const $ = id => document.getElementById(id);
+const inputs = ['aLat','aLon','bLat','bLon','poiLat','poiLon','ground','minAlt','maxAlt','upStep','speed','heading','startSide'];
+
+function toRad(d){ return d * Math.PI / 180; }
+function toDeg(r){ return r * 180 / Math.PI; }
+
+// Forward azimuth from p1 to p2 (degrees from north, 0-360)
+function bearing(lat1, lon1, lat2, lon2){
+  const f1 = toRad(lat1), f2 = toRad(lat2);
+  const dl = toRad(lon2 - lon1);
+  const y = Math.sin(dl) * Math.cos(f2);
+  const x = Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(dl);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+// Perpendicular to A→B travel direction, oriented toward the side the POI lies on.
+function autoHeadingDetails(){
+  const aLat = +$('aLat').value, aLon = +$('aLon').value;
+  const bLat = +$('bLat').value, bLon = +$('bLon').value;
+  const pLat = +$('poiLat').value, pLon = +$('poiLon').value;
+  const travel = bearing(aLat, aLon, bLat, bLon);
+  const midLat = (aLat + bLat) / 2, midLon = (aLon + bLon) / 2;
+  const toPOI = bearing(midLat, midLon, pLat, pLon);
+  const delta = ((toPOI - travel + 540) % 360) - 180; // signed -180..180
+  const side = delta >= 0 ? 'right' : 'left';
+  const heading = (travel + (delta >= 0 ? 90 : -90) + 360) % 360;
+  return { travel, toPOI, heading, side };
+}
+function autoHeading(){ return autoHeadingDetails().heading; }
+
+function recalcHeading(){
+  const h = autoHeading();
+  $('heading').value = h.toFixed(2);
+  generate();
+}
+
+function buildPattern(minA, maxA, upStep){
+  // legs[] = sequence of {side: 'A'|'B', alt: AGL}
+  const legs = [];
+  let side = 'A'; // starting side; we'll relabel later based on user choice
+  // Ascent in upStep increments
+  for (let alt = minA; alt <= maxA + 1e-9; alt += upStep){
+    legs.push({side, alt});
+    legs.push({side: side === 'A' ? 'B' : 'A', alt});
+    side = side === 'A' ? 'B' : 'A';
+  }
+  // Descent: same step size as ascent, but offset by upStep/2 so altitudes
+  // interleave between the ascent levels (e.g. up 10/20/.../60 → down 55/45/35/...).
+  let dAlt = maxA - upStep / 2;
+  while (dAlt >= minA - 1e-9){
+    legs.push({side, alt: dAlt});
+    legs.push({side: side === 'A' ? 'B' : 'A', alt: dAlt});
+    side = side === 'A' ? 'B' : 'A';
+    dAlt -= upStep;
+  }
+  return legs;
+}
+
+function generate(){
+  const aLat = +$('aLat').value, aLon = +$('aLon').value;
+  const bLat = +$('bLat').value, bLon = +$('bLon').value;
+  const ground = +$('ground').value;
+  // Snap min/max altitudes to multiples of 10
+  let minA = Math.round((+$('minAlt').value) / 10) * 10;
+  let maxA = Math.round((+$('maxAlt').value) / 10) * 10;
+  if ($('minAlt').value !== '' && +$('minAlt').value !== minA) $('minAlt').value = minA;
+  if ($('maxAlt').value !== '' && +$('maxAlt').value !== maxA) $('maxAlt').value = maxA;
+  const upStep = +$('upStep').value;
+  const speed = +$('speed').value;
+  const startSide = $('startSide').value;
+
+  // If heading is empty/NaN, auto-fill
+  let heading = parseFloat($('heading').value);
+  if (!isFinite(heading)){
+    heading = autoHeading();
+    $('heading').value = heading.toFixed(2);
+  }
+  const hd = autoHeadingDetails();
+  $('bearingInfo').textContent =
+    `Travel A→B = ${hd.travel.toFixed(2)}° · Mid→POI = ${hd.toPOI.toFixed(2)}° · auto heading (perpendicular, POI on ${hd.side}) = ${hd.heading.toFixed(2)}°`;
+
+  const poi = { lat: +$('poiLat').value, lon: +$('poiLon').value };
+  const coords = { A: { lat: aLat, lon: aLon }, B: { lat: bLat, lon: bLon } };
+  // If user picked B as start, swap the A/B labels in the pattern
+  const sideMap = startSide === 'A' ? { A: 'A', B: 'B' } : { A: 'B', B: 'A' };
+
+  const legs = buildPattern(minA, maxA, upStep);
+  const start = coords[startSide];
+
+  const mission = [];
+
+  // 1. Takeoff at start point, min altitude
+  mission.push({
+    location: { alt: +(ground + minA).toFixed(3), lat: start.lat, lon: start.lon },
+    speed,
+    headingMode: 'fixed',
+    waypointType: 'takeOff'
+  });
+
+  // 2. First waypoint with rotateYaw to lock the heading
+  const first = coords[sideMap[legs[0].side]];
+  mission.push({
+    location: { alt: +(ground + legs[0].alt).toFixed(3), lat: first.lat, lon: first.lon },
+    speed,
+    waypointType: 'waypoint',
+    headingMode: 'fixed',
+    actions: [{
+      order: 0,
+      parameters: {
+        rotateYaw: {
+          aircraftHeading: +heading.toFixed(2),
+          aircraftPathMode: 'clockwise'
+        }
+      },
+      type: 'rotateYaw'
+    }]
+  });
+
+  // 3. Remaining waypoints
+  for (let i = 1; i < legs.length; i++){
+    const p = coords[sideMap[legs[i].side]];
+    mission.push({
+      location: { alt: +(ground + legs[i].alt).toFixed(3), lat: p.lat, lon: p.lon },
+      speed,
+      waypointType: 'waypoint',
+      headingMode: 'fixed'
+    });
+  }
+
+  // 4. Landing at start point
+  mission.push({
+    location: { alt: +(ground + minA).toFixed(3), lat: start.lat, lon: start.lon },
+    speed,
+    headingMode: 'fixed',
+    waypointType: 'landing'
+  });
+
+  $('output').value = JSON.stringify(mission, null, 2);
+  $('summary').textContent = `${legs.length} passes · ${mission.length} mission items · heading ${heading.toFixed(2)}°`;
+
+  drawMap(coords.A, coords.B, poi, heading);
+  drawProfile(legs, sideMap, minA, maxA);
+  return mission;
+}
+
+// ---------- Map ----------
+let map, mapLayer;
+function initMap(){
+  map = L.map('map');
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '© OpenStreetMap'
+  }).addTo(map);
+  mapLayer = L.layerGroup().addTo(map);
+  map.on('click', (e) => {
+    $('poiLat').value = e.latlng.lat.toFixed(7);
+    $('poiLon').value = e.latlng.lng.toFixed(7);
+    // Re-run with auto heading (so click immediately reorients drone toward POI)
+    $('heading').value = autoHeading().toFixed(2);
+    generate();
+  });
+}
+function drawMap(A, B, POI, heading){
+  if (!map) return;
+  mapLayer.clearLayers();
+  const a = [A.lat, A.lon], b = [B.lat, B.lon], p = [POI.lat, POI.lon];
+  L.circleMarker(a, { radius: 8, color: '#0a0', fillColor: '#2c2', fillOpacity: 0.9 })
+    .bindTooltip('A', { permanent: true, direction: 'top' }).addTo(mapLayer);
+  L.circleMarker(b, { radius: 8, color: '#a00', fillColor: '#c22', fillOpacity: 0.9 })
+    .bindTooltip('B', { permanent: true, direction: 'top' }).addTo(mapLayer);
+  L.polyline([a, b], { color: '#2b7', weight: 4 }).addTo(mapLayer);
+
+  // POI marker (red triangle)
+  const poiIcon = L.divIcon({
+    className: 'poi-icon',
+    html: '<div style="font-size:22px;line-height:22px;color:#d00;text-shadow:0 0 2px #fff,0 0 2px #fff;">▲</div>',
+    iconSize: [22, 22], iconAnchor: [11, 18]
+  });
+  L.marker(p, { icon: poiIcon }).bindTooltip('POI', { permanent: true, direction: 'top' }).addTo(mapLayer);
+
+  // Heading arrow from midpoint
+  const midLat = (A.lat + B.lat) / 2;
+  const midLon = (A.lon + B.lon) / 2;
+  const arrowLen = Math.max(
+    Math.abs(A.lat - B.lat),
+    Math.abs(A.lon - B.lon)
+  ) * 0.6 || 0.0005;
+  const rad = toRad(heading);
+  const tipLat = midLat + arrowLen * Math.cos(rad);
+  const tipLon = midLon + arrowLen * Math.sin(rad) / Math.cos(toRad(midLat));
+  L.polyline([[midLat, midLon], [tipLat, tipLon]], {
+    color: '#e60', weight: 3
+  }).addTo(mapLayer);
+  L.circleMarker([tipLat, tipLon], { radius: 5, color: '#e60', fillColor: '#e60', fillOpacity: 1 })
+    .bindTooltip(`heading ${heading.toFixed(1)}°`, { permanent: false }).addTo(mapLayer);
+
+  map.fitBounds(L.latLngBounds([a, b, p]).pad(0.5));
+}
+
+// ---------- Side profile ----------
+function drawProfile(legs, sideMap, minA, maxA){
+  const svg = $('profile');
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  const W = 600, H = 260, padL = 40, padR = 10, padT = 10, padB = 30;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+
+  // x = 0 for sideMap.A, 1 for sideMap.B  (so visual A is always left)
+  const sideX = side => (sideMap[side] === sideMap.A ? 0 : 1);
+  const altRange = Math.max(1, maxA - minA);
+  const xAt = side => padL + sideX(side) * innerW;
+  const yAt = alt => padT + (1 - (alt - minA) / altRange) * innerH;
+
+  const ns = 'http://www.w3.org/2000/svg';
+  const mk = (tag, attrs) => {
+    const el = document.createElementNS(ns, tag);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  };
+
+  // Axis
+  svg.appendChild(mk('line', { x1: padL, y1: padT, x2: padL, y2: padT + innerH, stroke: '#888' }));
+  svg.appendChild(mk('line', { x1: padL, y1: padT + innerH, x2: padL + innerW, y2: padT + innerH, stroke: '#888' }));
+  // Y labels (min, max, mid)
+  [minA, (minA + maxA) / 2, maxA].forEach(v => {
+    const y = yAt(v);
+    const t = mk('text', { x: padL - 6, y: y + 4, 'text-anchor': 'end', 'font-size': 11, fill: '#444' });
+    t.textContent = v.toFixed(0) + 'm';
+    svg.appendChild(t);
+    svg.appendChild(mk('line', { x1: padL, y1: y, x2: padL + innerW, y2: y, stroke: '#eee' }));
+  });
+  // X labels A / B
+  const labA = mk('text', { x: padL, y: H - 8, 'text-anchor': 'middle', 'font-size': 12, fill: '#0a0', 'font-weight': 600 });
+  labA.textContent = 'A';
+  const labB = mk('text', { x: padL + innerW, y: H - 8, 'text-anchor': 'middle', 'font-size': 12, fill: '#a00', 'font-weight': 600 });
+  labB.textContent = 'B';
+  svg.appendChild(labA); svg.appendChild(labB);
+
+  // Detect where ascent ends and descent begins
+  let peakIdx = 0;
+  for (let i = 0; i < legs.length; i++) if (legs[i].alt >= legs[peakIdx].alt) peakIdx = i;
+
+  // Path
+  let d = '';
+  legs.forEach((leg, i) => {
+    const x = xAt(leg.side), y = yAt(leg.alt);
+    d += (i === 0 ? `M ${x} ${y}` : ` L ${x} ${y}`);
+  });
+  // Split into ascent + descent for color
+  let dUp = '', dDown = '';
+  legs.forEach((leg, i) => {
+    const x = xAt(leg.side), y = yAt(leg.alt);
+    if (i <= peakIdx) dUp += (dUp ? ' L ' : 'M ') + `${x} ${y}`;
+    if (i >= peakIdx) dDown += (dDown ? ' L ' : 'M ') + `${x} ${y}`;
+  });
+  svg.appendChild(mk('path', { d: dUp, stroke: '#26c', 'stroke-width': 2, fill: 'none' }));
+  svg.appendChild(mk('path', { d: dDown, stroke: '#e80', 'stroke-width': 2, fill: 'none' }));
+
+  // Waypoint dots
+  legs.forEach(leg => {
+    svg.appendChild(mk('circle', { cx: xAt(leg.side), cy: yAt(leg.alt), r: 3, fill: '#333' }));
+  });
+}
+
+function download(){
+  const data = $('output').value;
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'mission.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+inputs.forEach(id => $(id).addEventListener('input', generate));
+$('recalcHeading').addEventListener('click', recalcHeading);
+$('download').addEventListener('click', download);
+
+// Initial run — auto-fill heading and generate
+initMap();
+$('heading').value = autoHeading().toFixed(2);
+generate();
+</script>
+
+</body>
+</html>

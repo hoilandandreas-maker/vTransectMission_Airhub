@@ -1,0 +1,26 @@
+<!doctype html><meta charset="utf-8">
+<title>Surfaces</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="_base.css">
+<style>
+  .row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .swatch {
+    border-radius: var(--radius-lg);
+    border: var(--border-width) solid var(--border-default);
+    aspect-ratio: 5/3;
+    padding: 12px;
+    display: flex; flex-direction: column; justify-content: space-between;
+  }
+  .swatch .name { font: var(--t-label); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
+  .swatch .hex  { font: var(--t-small); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+</style>
+<body><div class="card">
+  <div class="eyebrow">Surfaces · tonal stack</div>
+  <div class="row">
+    <div class="swatch" style="background:#052230"><span class="name">bg/base</span><span class="hex">#052230</span></div>
+    <div class="swatch" style="background:#073347"><span class="name">bg/panel</span><span class="hex">#073347</span></div>
+    <div class="swatch" style="background:#0a3d55"><span class="name">bg/elevated</span><span class="hex">#0a3d55</span></div>
+    <div class="swatch" style="background:#0d4a67"><span class="name">bg/hover</span><span class="hex">#0d4a67</span></div>
+  </div>
+</div></body>

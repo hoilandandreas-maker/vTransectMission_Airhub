@@ -1,0 +1,35 @@
+<!doctype html><meta charset="utf-8">
+<title>Status badges</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="_base.css">
+<style>
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 22px; padding: 0 8px;
+    border-radius: var(--radius-sm);
+    font: 500 11px/1 Inter;
+    border: 0.5px solid var(--border-default);
+    background: rgba(255,255,255,0.04);
+    color: var(--text-secondary);
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .draft .dot { background: var(--text-muted); }
+  .active .dot { background: var(--accent-light); }
+  .completed .dot { background: var(--success); }
+  .warning .dot { background: var(--warning); }
+  .cancelled .dot { background: var(--danger); }
+  .meta { font: var(--t-small); color: var(--text-muted); }
+</style>
+<body><div class="card">
+  <div class="eyebrow">Status badges</div>
+  <div class="row">
+    <span class="badge draft"><span class="dot"></span>Draft</span>
+    <span class="badge active"><span class="dot"></span>Active</span>
+    <span class="badge completed"><span class="dot"></span>Completed</span>
+    <span class="badge warning"><span class="dot"></span>Warning</span>
+    <span class="badge cancelled"><span class="dot"></span>Cancelled</span>
+  </div>
+  <div class="meta">Title-case label · 6px filled dot in semantic color · 4px radius</div>
+</div></body>

@@ -1,0 +1,30 @@
+<!doctype html><meta charset="utf-8">
+<title>Form inputs</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="_base.css">
+<style>
+  .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  label { font: 500 11px/1.4 Inter; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
+  input, select {
+    height: var(--input-height);
+    background: var(--bg-elevated);
+    border: 0.5px solid var(--border-default);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font: 400 13px/1 Inter;
+    padding: 0 12px;
+    outline: none;
+  }
+  input::placeholder { color: var(--text-muted); }
+  input.focused { border-color: var(--accent-light); box-shadow: 0 0 0 1px var(--accent-light); }
+</style>
+<body><div class="card">
+  <div class="eyebrow">Form inputs · 34px height</div>
+  <div class="grid">
+    <div class="field"><label>Mission name</label><input placeholder="e.g. Flare inspection Aker"></div>
+    <div class="field"><label>Line of sight</label><select><option>VLOS</option></select></div>
+    <div class="field"><label>Focused state</label><input class="focused" value="Stavanger"></div>
+  </div>
+</div></body>

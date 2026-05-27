@@ -1,0 +1,25 @@
+<!doctype html><meta charset="utf-8">
+<title>Semantic</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="_base.css">
+<style>
+  .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .swatch {
+    border-radius: var(--radius-lg);
+    aspect-ratio: 5/2;
+    padding: 14px 16px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    color: #0a1a22;
+  }
+  .swatch .name { font: var(--t-label); letter-spacing: 0.06em; text-transform: uppercase; }
+  .swatch .hex  { font: var(--t-small); opacity: 0.7; font-variant-numeric: tabular-nums; }
+</style>
+<body><div class="card">
+  <div class="eyebrow">Semantic · status</div>
+  <div class="row">
+    <div class="swatch" style="background:#4ade80"><span class="name">success</span><span class="hex">#4ade80 — completed, healthy</span></div>
+    <div class="swatch" style="background:#fb923c"><span class="name">warning</span><span class="hex">#fb923c — attention, near limit</span></div>
+    <div class="swatch" style="background:#f87171"><span class="name">danger</span><span class="hex">#f87171 — error, destructive</span></div>
+  </div>
+</div></body>

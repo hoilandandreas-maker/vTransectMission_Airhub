@@ -1,0 +1,26 @@
+{
+  "source": {
+    "filename": "Airhub.fig",
+    "nodeCount": 301,
+    "pages": [
+      {
+        "id": "0:1",
+        "name": "Airhub 1",
+        "selected": true
+      }
+    ],
+    "userSelectedFrames": []
+  },
+  "components": [],
+  "tokens": {
+    "count": 0,
+    "modes": [
+      "default"
+    ]
+  },
+  "styles": {
+    "text": 0,
+    "effect": 0
+  },
+  "warnings": []
+}

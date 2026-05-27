@@ -1,0 +1,117 @@
+/* ============================================================
+   AirHub Design System — Foundations
+   Source: Figma file "AirHub" (Page: Airhub 1)
+   Spec confirmed: bg/base #052230 from AirHub dashboard
+                   meta-theme-color. Accent + panels reconstructed
+                   from UI screenshots.
+   ============================================================ */
+
+/* Inter is loaded via Google Fonts in the consuming page:
+   <link rel="preconnect" href="https://fonts.googleapis.com">
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+*/
+
+:root {
+  /* ----- Surfaces (deep teal/navy stack) ----- */
+  --bg-base:      #052230;   /* page background — confirmed from dashboard meta-theme-color */
+  --bg-panel:     #073347;   /* primary panel / sidebar */
+  --bg-elevated:  #0a3d55;   /* cards, popovers */
+  --bg-hover:     #0d4a67;   /* row + button hover state */
+
+  /* ----- Accent (action blue) ----- */
+  --accent-primary: #1a7cba; /* primary CTAs, focus, active nav */
+  --accent-light:   #4eadea; /* highlights, links, active dot */
+
+  /* ----- Semantic (status) ----- */
+  --success: #4ade80;  /* completed, healthy */
+  --warning: #fb923c;  /* attention, near limit */
+  --danger:  #f87171;  /* error, cancelled, destructive */
+
+  /* ----- Text ----- */
+  --text-primary:   #e8f4f8;            /* body + headings */
+  --text-secondary: #a8c8d8;            /* meta, labels */
+  --text-muted:     #5a8a9f;            /* placeholders, captions */
+
+  /* ----- Borders ----- */
+  --border-default:  rgba(255, 255, 255, 0.08);
+  --border-emphasis: rgba(255, 255, 255, 0.15);
+  --border-width:    0.5px;
+
+  /* ----- Radii ----- */
+  --radius-sm: 4px;   /* badges, chips */
+  --radius-md: 6px;   /* buttons, inputs */
+  --radius-lg: 8px;   /* cards, panels */
+
+  /* ----- Spacing ----- */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-md-lg: 14px;
+  --space-lg: 24px;
+  --space-xl: 48px;
+  --space-2xl: 64px;
+
+  /* ----- Control sizing ----- */
+  --btn-height:   34px;
+  --input-height: 34px;
+  --btn-pad-x: 14px;
+  --btn-pad-y: 8px;
+
+  /* ----- Type ----- */
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* Type scale */
+  --t-h1:    600 28px/1.2 var(--font-sans);
+  --t-h2:    500 20px/1.3 var(--font-sans);
+  --t-h3:    500 16px/1.4 var(--font-sans);
+  --t-body:  400 14px/1.5 var(--font-sans);
+  --t-small: 400 12px/1.45 var(--font-sans);
+  --t-label: 500 11px/1.4 var(--font-sans);
+
+  /* ----- Elevation -----
+     AirHub uses borders + tonal layering rather than soft shadows.
+     Reserve these for floating popovers + dropdowns only. */
+  --shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.4),
+                    0 0 0 0.5px rgba(255, 255, 255, 0.08);
+  --shadow-modal:   0 24px 48px rgba(0, 0, 0, 0.55),
+                    0 0 0 0.5px rgba(255, 255, 255, 0.1);
+
+  /* ----- Motion -----
+     Quick + utilitarian. No bounces. */
+  --ease-out: cubic-bezier(0.16, 0.84, 0.44, 1);
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+}
+
+/* ============================================================
+   Element defaults — use the tokens above.
+   ============================================================ */
+
+html, body {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font: var(--t-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1 { font: var(--t-h1); letter-spacing: -0.01em; margin: 0; }
+h2 { font: var(--t-h2); margin: 0; }
+h3 { font: var(--t-h3); margin: 0; }
+p, li { font: var(--t-body); color: var(--text-primary); }
+small, .small { font: var(--t-small); color: var(--text-secondary); }
+
+/* Label — short uppercase eyebrow used above sections + form fields */
+.label,
+label {
+  font: var(--t-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+code, kbd, pre { font-family: var(--font-mono); font-size: 13px; }
+
+::selection { background: rgba(78, 173, 234, 0.35); color: var(--text-primary); }
