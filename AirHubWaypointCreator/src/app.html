@@ -1,0 +1,502 @@
+  <style>
+    /* ============================================================
+       AirHub Design System — Foundations (Vtransect)
+       Palette: deep teal-navy tonal stack · one action blue ·
+       3 status colors · hairline borders · Inter · tabular-nums.
+       ============================================================ */
+    :root {
+      --bg-base: #052230;
+      --bg-panel: #073347;
+      --bg-elevated: #0a3d55;
+      --bg-hover: #0d4a67;
+      --accent-primary: #1a7cba;
+      --accent-light: #4eadea;
+      --success: #4ade80;
+      --warning: #fb923c;
+      --danger: #f87171;
+      --text-primary: #e8f4f8;
+      --text-secondary: #a8c8d8;
+      --text-muted: #5a8a9f;
+      --border-default: rgba(255, 255, 255, 0.08);
+      --border-emphasis: rgba(255, 255, 255, 0.15);
+      --radius-sm: 4px;
+      --radius-md: 6px;
+      --radius-lg: 8px;
+      --btn-height: 34px;
+      --input-height: 34px;
+      --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --font-mono: ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+      --t-body: 400 14px/1.5 var(--font-sans);
+      --ease-out: cubic-bezier(0.16, 0.84, 0.44, 1);
+      --dur-fast: 120ms;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%; margin: 0;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      font: var(--t-body);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    body { display: flex; flex-direction: column; overflow: hidden; }
+    ::selection { background: rgba(78, 173, 234, 0.35); color: var(--text-primary); }
+    *::-webkit-scrollbar { width: 10px; height: 10px; }
+    *::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 4px; }
+    *::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+
+    /* ----- App chrome ----- */
+    header.app {
+      display: flex; align-items: center; gap: 14px;
+      padding: 12px 20px;
+      border-bottom: 0.5px solid var(--border-default);
+      background: var(--bg-panel);
+      flex-shrink: 0; flex-wrap: wrap;
+    }
+    header.app .brand { display: flex; align-items: center; gap: 10px; }
+    header.app .brand svg { width: 22px; height: 22px; }
+    header.app .brand .name { font: 600 15px/1 var(--font-sans); letter-spacing: -0.01em; }
+    header.app .crumb { color: var(--text-muted); font: 400 13px/1 var(--font-sans); }
+    header.app .crumb b { color: var(--text-secondary); font-weight: 500; }
+    header.app .spacer { flex: 1; }
+    header.app .summary {
+      font: 400 12px/1 var(--font-sans); color: var(--text-secondary);
+      padding: 7px 10px; border-radius: var(--radius-sm);
+      background: rgba(255,255,255,0.04);
+      border: 0.5px solid var(--border-default);
+      font-variant-numeric: tabular-nums; white-space: nowrap;
+    }
+    .version {
+      font: 500 10px/1 var(--font-sans); color: var(--text-muted);
+      border: 0.5px solid var(--border-default);
+      border-radius: 20px; padding: 4px 9px; letter-spacing: 0.05em;
+    }
+
+    /* ----- Buttons ----- */
+    button {
+      height: var(--btn-height); padding: 0 13px;
+      border-radius: var(--radius-md);
+      font: 500 13px/1 var(--font-sans); cursor: pointer;
+      border: 0.5px solid var(--border-default);
+      background: var(--bg-elevated); color: var(--text-primary);
+      display: inline-flex; align-items: center; gap: 7px;
+      transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast), transform 90ms var(--ease-out);
+      white-space: nowrap;
+    }
+    button:hover { background: var(--bg-hover); }
+    button:active { transform: scale(0.97); }
+    button:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+    button.primary { background: var(--accent-primary); color: #fff; border-color: transparent; }
+    button.primary:hover { background: #2089c9; }
+    button.icon { height: 30px; padding: 0 10px; font-size: 12px; color: var(--text-secondary); }
+    button svg, button i { width: 14px; height: 14px; flex-shrink: 0; }
+    .lucide { stroke-width: 1.75; }
+
+    /* ----- Layout ----- */
+    .layout { display: grid; grid-template-columns: 372px 1fr; flex: 1; min-height: 0; }
+    .panel-left {
+      background: var(--bg-panel);
+      border-right: 0.5px solid var(--border-default);
+      padding: 16px; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .panel-right {
+      padding: 16px; display: flex; flex-direction: column; gap: 12px;
+      overflow: hidden; min-height: 0;
+    }
+    @media (max-width: 920px) {
+      body { overflow: auto; }
+      .layout { grid-template-columns: 1fr; }
+      .panel-right { overflow: visible; }
+      #map { min-height: 320px; }
+    }
+
+    /* ----- Field groups ----- */
+    .group { display: flex; flex-direction: column; gap: 9px; }
+    .group-title {
+      font: 500 11px/1 var(--font-sans); letter-spacing: 0.06em; text-transform: uppercase;
+      color: var(--text-muted); display: flex; align-items: center; gap: 6px;
+    }
+    .group-title .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .group-title::after { content: ''; flex: 1; height: 1px; background: var(--border-default); margin-left: 4px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 9px; }
+
+    .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+    .field label {
+      font: 500 11px/1.4 var(--font-sans); letter-spacing: 0.04em; text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+    .field input, .field select, .field textarea {
+      width: 100%; min-width: 0; box-sizing: border-box;
+      height: var(--input-height); padding: 0 10px;
+      background: var(--bg-elevated);
+      border: 0.5px solid var(--border-default);
+      border-radius: var(--radius-md);
+      color: var(--text-primary);
+      font: 400 13px/1 var(--font-sans);
+      outline: none; font-variant-numeric: tabular-nums;
+      -moz-appearance: textfield;
+    }
+    .field textarea { height: auto; min-height: 52px; padding: 8px 10px; resize: vertical; line-height: 1.5; }
+    .field input::-webkit-inner-spin-button, .field input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    .field select {
+      -webkit-appearance: none; appearance: none; padding-right: 28px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235a8a9f' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 10px center;
+    }
+    .field input:focus, .field select:focus, .field textarea:focus {
+      border-color: var(--accent-light); box-shadow: 0 0 0 1px var(--accent-light);
+    }
+    .field input[readonly] { color: var(--text-muted); cursor: default; }
+
+    /* ----- Mission switcher ----- */
+    .switcher { display: flex; flex-direction: column; gap: 10px; }
+    .switch-cat { display: flex; flex-direction: column; gap: 6px; }
+    .switch-cat-label { font: 500 10px/1 var(--font-sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
+    .switch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .switch-btn {
+      height: auto; padding: 9px 10px; text-align: left; justify-content: flex-start;
+      background: var(--bg-elevated); border: 0.5px solid var(--border-default);
+      border-radius: var(--radius-md); color: var(--text-secondary);
+      font: 500 12px/1.2 var(--font-sans); display: flex; align-items: center; gap: 8px;
+    }
+    .switch-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .switch-btn.on { border-color: var(--accent-light); color: var(--text-primary); background: rgba(78,173,234,0.12); }
+    .switch-btn i { width: 15px; height: 15px; color: var(--accent-light); }
+
+    /* ----- Segmented control ----- */
+    .seg { display: flex; background: var(--bg-elevated); border: 0.5px solid var(--border-default); border-radius: var(--radius-md); overflow: hidden; }
+    .seg-btn {
+      flex: 1; height: 32px; background: transparent; border: none; border-right: 0.5px solid var(--border-default);
+      color: var(--text-muted); font: 500 11px/1 var(--font-sans); letter-spacing: 0.03em; cursor: pointer;
+      transition: background var(--dur-fast), color var(--dur-fast); border-radius: 0; padding: 0 4px;
+    }
+    .seg-btn:last-child { border-right: none; }
+    .seg-btn.on { background: rgba(78,173,234,0.14); color: var(--accent-light); }
+    .seg-btn:hover:not(.on) { background: var(--bg-hover); color: var(--text-secondary); }
+
+    /* ----- Toggle ----- */
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; }
+    .toggle-label { font: 400 12px/1.4 var(--font-sans); color: var(--text-secondary); }
+    .toggle {
+      width: 38px; height: 21px; border-radius: 11px; background: var(--bg-hover);
+      border: 0.5px solid var(--border-emphasis); cursor: pointer; position: relative;
+      transition: background var(--dur-fast); flex-shrink: 0;
+    }
+    .toggle.on { background: var(--accent-primary); border-color: var(--accent-primary); }
+    .toggle::after {
+      content: ''; position: absolute; top: 2.5px; left: 2.5px; width: 14px; height: 14px;
+      border-radius: 50%; background: var(--text-muted); transition: transform var(--dur-fast), background var(--dur-fast);
+    }
+    .toggle.on::after { transform: translateX(17px); background: #fff; }
+
+    /* ----- Ring cards (orbit) ----- */
+    .ring-card { background: var(--bg-elevated); border: 0.5px solid var(--border-default); border-radius: var(--radius-md); padding: 9px; margin-bottom: 7px; }
+    .ring-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
+    .ring-name { font: 600 10px/1 var(--font-sans); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+    .ring-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .ring-acts { display: flex; gap: 4px; }
+    .ring-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 7px; }
+    .btn-xs { height: 24px; padding: 0 7px; font-size: 10px; color: var(--text-muted); background: transparent; gap: 3px; }
+    .btn-xs:hover { color: var(--text-secondary); }
+    .btn-xs.danger:hover { background: rgba(248,113,113,0.12); border-color: var(--danger); color: var(--danger); }
+    .btn-add {
+      width: 100%; height: 32px; background: transparent; border: 1px dashed var(--border-emphasis);
+      border-radius: var(--radius-md); color: var(--text-muted); font: 500 11px/1 var(--font-sans);
+      letter-spacing: 0.04em; cursor: pointer; transition: all var(--dur-fast); margin-top: 2px; gap: 5px;
+    }
+    .btn-add:hover { border-style: solid; border-color: var(--accent-light); color: var(--accent-light); background: rgba(78,173,234,0.08); }
+
+    /* ----- Presets ----- */
+    .preset-bar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .preset-label { font: 500 10px/1 var(--font-sans); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-right: 2px; }
+    .preset-btn {
+      height: 26px; padding: 0 10px; background: var(--bg-elevated); border: 0.5px solid var(--border-default);
+      border-radius: 20px; color: var(--text-muted); font: 500 10px/1 var(--font-sans);
+      letter-spacing: 0.04em; cursor: pointer; transition: all var(--dur-fast);
+    }
+    .preset-btn:hover { border-color: var(--accent-light); color: var(--accent-light); background: rgba(78,173,234,0.08); }
+
+    /* ----- Geometry toolbar ----- */
+    .geom-toolbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .vtx-count { font: 400 12px/1 var(--font-sans); color: var(--text-muted); font-variant-numeric: tabular-nums; margin-left: auto; }
+    .hint {
+      font: 400 12px/1.5 var(--font-sans); color: var(--text-muted);
+      padding: 8px 10px; background: rgba(255,255,255,0.03); border-radius: var(--radius-md);
+    }
+    .hint label { color: var(--text-secondary); cursor: pointer; }
+    .hint input[type=radio] { accent-color: var(--accent-light); vertical-align: middle; margin: 0 3px 2px 0; }
+
+    /* ----- Collapsible sections ----- */
+    .section-label {
+      font: 500 11px/1 var(--font-sans); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted);
+      display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;
+    }
+    .section-label::after { content: ''; flex: 1; height: 1px; background: var(--border-default); }
+    .section-label .sa { transition: transform 0.2s; display: inline-block; font-size: 12px; }
+    .section-label.closed .sa { transform: rotate(-90deg); }
+    .collapsible { display: flex; flex-direction: column; gap: 9px; overflow: hidden; transition: max-height 0.25s var(--ease-out); }
+    .collapsible.closed { max-height: 0 !important; }
+
+    /* ----- Panes (map / profile / json) ----- */
+    .pane { background: var(--bg-elevated); border: 0.5px solid var(--border-default); border-radius: var(--radius-lg); overflow: hidden; display: flex; flex-direction: column; }
+    .pane-head { display: flex; justify-content: space-between; align-items: center; padding: 9px 13px; border-bottom: 0.5px solid var(--border-default); flex-shrink: 0; }
+    .pane-title { font: 500 11px/1 var(--font-sans); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
+    .pane-meta { font: 400 12px/1 var(--font-sans); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+    .map-wrap { flex: 1 1 auto; min-height: 220px; }
+    #map { flex: 1; min-height: 0; filter: hue-rotate(180deg) invert(1) brightness(0.85) contrast(0.95) saturate(0.4); }
+    .leaflet-control-attribution, .leaflet-popup-content-wrapper, .leaflet-popup-tip, .leaflet-control-zoom a, .leaflet-tooltip { filter: invert(1) hue-rotate(180deg); }
+    .leaflet-tooltip { background: var(--bg-panel) !important; color: var(--text-primary) !important; border: 0.5px solid var(--border-emphasis) !important; box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important; font: 500 11px/1 var(--font-sans) !important; }
+    .leaflet-container { background: var(--bg-elevated) !important; }
+
+    .profile-wrap { height: 168px; flex-shrink: 0; }
+    .profile-wrap .pane-body { flex: 1; padding: 10px 12px; display: flex; min-height: 0; }
+    #profile { width: 100%; height: 100%; }
+    .topdown-note { flex: 1; display: flex; align-items: center; justify-content: center; padding: 12px; text-align: center; color: var(--text-muted); font: 400 12px/1.5 var(--font-sans); }
+
+    .json-wrap { height: 150px; flex-shrink: 0; }
+    .json-wrap textarea {
+      flex: 1; min-height: 0; background: transparent; border: none; color: var(--text-secondary);
+      font: 400 11.5px/1.5 var(--font-mono); padding: 10px 13px; resize: none; outline: none;
+    }
+
+    /* ----- Stats grid ----- */
+    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; flex-shrink: 0; }
+    .stat { background: var(--bg-elevated); border: 0.5px solid var(--border-default); border-radius: var(--radius-md); padding: 8px 10px; }
+    .stat-label { font: 500 9px/1 var(--font-sans); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 5px; }
+    .stat-value { font: 600 16px/1 var(--font-sans); color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    .stat-unit { font: 400 9px/1 var(--font-sans); color: var(--text-muted); margin-left: 1px; }
+
+    /* ----- Badges ----- */
+    .badge-row { display: flex; gap: 6px; flex-wrap: wrap; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: var(--radius-sm); font: 500 11px/1 var(--font-sans); background: rgba(255,255,255,0.04); border: 0.5px solid var(--border-default); color: var(--text-secondary); }
+    .badge .dot { width: 6px; height: 6px; border-radius: 50%; }
+
+    /* ----- Errors / warnings ----- */
+    .err-list { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; max-height: 116px; overflow-y: auto; }
+    .err-item { font: 400 11px/1.4 var(--font-sans); padding: 7px 10px; border-radius: var(--radius-sm); background: rgba(248,113,113,0.12); border: 0.5px solid var(--danger); color: var(--danger); display: flex; gap: 6px; }
+    .err-item.warn { background: rgba(251,146,60,0.12); border-color: var(--warning); color: var(--warning); }
+    .err-item .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; margin-top: 3px; }
+
+    /* ----- Output format tabs ----- */
+    .fmt-tabs { display: flex; gap: 3px; background: var(--bg-elevated); border: 0.5px solid var(--border-default); border-radius: var(--radius-md); padding: 3px; }
+    .fmt-tab { flex: 1; height: 28px; background: transparent; border: none; border-radius: var(--radius-sm); color: var(--text-muted); font: 500 10px/1 var(--font-sans); letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: all var(--dur-fast); }
+    .fmt-tab.on { background: var(--accent-primary); color: #fff; }
+    .fmt-tab:hover:not(.on) { background: var(--bg-hover); color: var(--text-secondary); }
+
+    /* ----- Modal ----- */
+    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 1000; align-items: center; justify-content: center; padding: 2rem; }
+    .modal-bg.open { display: flex; }
+    .modal { background: var(--bg-panel); border: 0.5px solid var(--border-emphasis); border-radius: var(--radius-lg); width: 100%; max-width: 640px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 16px 48px rgba(0,0,0,0.5); }
+    .modal-hdr { display: flex; align-items: center; justify-content: space-between; padding: 13px 15px; border-bottom: 0.5px solid var(--border-default); flex-shrink: 0; }
+    .modal-title { font: 600 13px/1 var(--font-sans); }
+    .modal-body { flex: 1; overflow: auto; padding: 14px; }
+    .modal-ftr { display: flex; gap: 7px; padding: 12px 15px; border-top: 0.5px solid var(--border-default); flex-shrink: 0; }
+    .modal-ftr button { flex: 1; justify-content: center; }
+    pre.code-pre { font: 400 11.5px/1.55 var(--font-mono); color: var(--text-secondary); white-space: pre-wrap; word-break: break-all; margin: 0; }
+
+    /* ----- Flash toast ----- */
+    .flash { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--bg-elevated); border: 0.5px solid var(--success); color: var(--success); border-radius: var(--radius-md); padding: 9px 16px; font: 500 12px/1 var(--font-sans); opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap; z-index: 1100; }
+    .flash.show { opacity: 1; }
+    .flash.err { border-color: var(--danger); color: var(--danger); }
+  </style>
+</head>
+<body>
+
+  <header class="app">
+    <div class="brand">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="AirHub mark">
+        <g fill="none" stroke="#4eadea" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M16 6 L16 26 M6 16 L26 16"></path>
+          <circle cx="16" cy="6" r="2.5" fill="#1a7cba" stroke="none"></circle>
+          <circle cx="16" cy="26" r="2.5" fill="#1a7cba" stroke="none"></circle>
+          <circle cx="6" cy="16" r="2.5" fill="#1a7cba" stroke="none"></circle>
+          <circle cx="26" cy="16" r="2.5" fill="#1a7cba" stroke="none"></circle>
+          <circle cx="16" cy="16" r="3" fill="#4eadea" stroke="none"></circle>
+        </g>
+      </svg>
+      <span class="name">AirHub</span>
+    </div>
+    <span class="crumb">Waypoint creator / <b id="crumbType">Vertical transect</b></span>
+    <div class="spacer"></div>
+    <span class="summary" id="summary">—</span>
+    <button class="icon" id="btnUndo" title="Undo" disabled><i data-lucide="undo-2"></i></button>
+    <button class="icon" id="btnRedo" title="Redo" disabled><i data-lucide="redo-2"></i></button>
+    <button class="icon" id="btnExport" title="Export settings"><i data-lucide="save"></i>Settings</button>
+    <label class="icon" id="btnImport" title="Import settings" style="cursor:pointer;border:0.5px solid var(--border-default);border-radius:var(--radius-md);height:30px;padding:0 10px;display:inline-flex;align-items:center;gap:7px;color:var(--text-secondary);font:500 12px/1 var(--font-sans)">
+      <i data-lucide="folder-open"></i>Load
+      <input type="file" accept=".json" style="display:none" id="importFile">
+    </label>
+    <button class="primary" id="btnDownload"><i data-lucide="download"></i>Download</button>
+    <span class="version">v1.0</span>
+  </header>
+
+  <div class="layout">
+
+    <aside class="panel-left">
+
+      <!-- Mission type switcher (rendered by JS) -->
+      <div class="switcher" id="missionSwitcher"></div>
+
+      <!-- Per-type presets (rendered by JS) -->
+      <div class="preset-bar" id="presetBar"></div>
+
+      <!-- Geometry controls: A/B/POI radios OR vertex toolbar (rendered by JS) -->
+      <div class="group" id="geomGroup">
+        <div class="group-title" id="geomTitle">Geometry</div>
+        <div id="geomControls"></div>
+      </div>
+
+      <!-- Per-type parameters (rendered by JS from mission.fields) -->
+      <div id="typeParams"></div>
+
+      <!-- Shared: Flight -->
+      <div class="group">
+        <div class="group-title">Flight</div>
+        <div class="grid-2">
+          <div class="field"><label>Speed (m/s)</label><input type="number" step="0.5" min="0.5" id="speed"></div>
+          <div class="field"><label>Ground (m AMSL)</label><input type="number" step="any" id="ground"></div>
+        </div>
+      </div>
+
+      <!-- Shared: Camera & capture (collapsible) -->
+      <div class="group">
+        <div class="section-label" data-sec="cam">Camera &amp; capture <span class="sa">&#x25be;</span></div>
+        <div class="collapsible" id="sec-cam">
+          <div class="grid-2">
+            <div class="field">
+              <label>Camera preset</label>
+              <select id="cameraPreset">
+                <option value="custom">Custom</option>
+                <option value="x7_24">Zenmuse X7 24mm</option>
+                <option value="x7_35">Zenmuse X7 35mm</option>
+                <option value="p1_35">Zenmuse P1 35mm</option>
+                <option value="p1_50">Zenmuse P1 50mm</option>
+                <option value="m3e">Mavic 3E (4/3")</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Trigger</label>
+              <div class="seg" id="trigSeg">
+                <button class="seg-btn on" data-trig="waypoint">Waypoint</button>
+                <button class="seg-btn" data-trig="interval">Interval</button>
+              </div>
+            </div>
+          </div>
+          <div class="field" id="intervalField" style="display:none">
+            <label>Photo interval (s)</label>
+            <input type="number" step="0.5" min="0.5" max="30" id="photoInterval">
+          </div>
+          <div class="grid-2">
+            <div class="field"><label>Front overlap (%)</label><input type="number" step="5" min="0" max="95" id="frontOverlap"></div>
+            <div class="field"><label>Side overlap (%)</label><input type="number" step="5" min="0" max="95" id="sideOverlap"></div>
+          </div>
+          <div class="hint">Overlap drives lane &amp; photo spacing for grid / corridor / facade missions when no explicit spacing is set.</div>
+        </div>
+      </div>
+
+      <!-- Shared: Safety constraints (collapsible) -->
+      <div class="group">
+        <div class="section-label" data-sec="safety">Safety constraints <span class="sa">&#x25be;</span></div>
+        <div class="collapsible" id="sec-safety">
+          <div class="grid-3">
+            <div class="field"><label>Min alt (m)</label><input type="number" step="1" min="0" id="minAltSafe"></div>
+            <div class="field"><label>Max alt (m)</label><input type="number" step="5" id="maxAltSafe"></div>
+            <div class="field"><label>Max speed</label><input type="number" step="0.5" min="0.5" id="maxSpeed"></div>
+          </div>
+          <div class="toggle-row">
+            <span class="toggle-label">Geofence — block export beyond radius</span>
+            <div class="toggle" id="togGeofence"></div>
+          </div>
+          <div class="field" id="geofenceField" style="display:none;max-width:180px">
+            <label>Geofence radius (m)</label><input type="number" step="5" min="1" id="geofenceRadius">
+          </div>
+        </div>
+      </div>
+
+      <!-- Shared: Mission metadata (collapsible) -->
+      <div class="group">
+        <div class="section-label" data-sec="meta">Mission metadata <span class="sa">&#x25be;</span></div>
+        <div class="collapsible" id="sec-meta">
+          <div class="grid-2">
+            <div class="field"><label>Operator</label><input type="text" id="metaOperator" placeholder="Name"></div>
+            <div class="field"><label>Site / asset</label><input type="text" id="metaSite" placeholder="Site"></div>
+          </div>
+          <div class="field"><label>Date</label><input type="text" id="metaDate" readonly></div>
+          <div class="field"><label>Notes</label><textarea id="metaNotes" placeholder="Optional mission notes"></textarea></div>
+        </div>
+      </div>
+
+      <!-- Output format -->
+      <div class="group">
+        <div class="group-title">Output format</div>
+        <div class="fmt-tabs" id="fmtTabs">
+          <button class="fmt-tab on" data-fmt="airhub">AirHub</button>
+          <button class="fmt-tab" data-fmt="kml">KML</button>
+          <button class="fmt-tab" data-fmt="csv">CSV</button>
+        </div>
+      </div>
+
+    </aside>
+
+    <section class="panel-right">
+
+      <div class="pane map-wrap">
+        <div class="pane-head">
+          <span class="pane-title">Top view</span>
+          <div class="badge-row" id="mapLegend"></div>
+        </div>
+        <div id="map"></div>
+      </div>
+
+      <div class="pane profile-wrap" id="profilePane">
+        <div class="pane-head">
+          <span class="pane-title" id="profileTitle">Side profile · AGL</span>
+          <span class="pane-meta" id="profileMeta"></span>
+        </div>
+        <div class="pane-body"><svg id="profile"></svg></div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat"><div class="stat-label">Waypoints</div><div class="stat-value" id="s-total">0</div></div>
+        <div class="stat"><div class="stat-label">Photos</div><div class="stat-value" id="s-photos">0</div></div>
+        <div class="stat"><div class="stat-label">Segments</div><div class="stat-value" id="s-segs">0</div></div>
+        <div class="stat"><div class="stat-label">Distance</div><div class="stat-value" id="s-dist">—</div></div>
+        <div class="stat"><div class="stat-label">Est. time</div><div class="stat-value" id="s-time">—</div></div>
+        <div class="stat"><div class="stat-label">Max alt</div><div class="stat-value" id="s-maxalt">—</div></div>
+      </div>
+
+      <div class="err-list" id="errList"></div>
+
+      <div class="pane json-wrap">
+        <div class="pane-head">
+          <span class="pane-title" id="outTitle">mission.json</span>
+          <span class="pane-meta"><button class="icon" id="btnPreview" style="height:24px;padding:0 8px"><i data-lucide="eye"></i>Preview</button></span>
+        </div>
+        <textarea id="output" readonly></textarea>
+      </div>
+
+    </section>
+  </div>
+
+  <div class="modal-bg" id="modalBg">
+    <div class="modal">
+      <div class="modal-hdr">
+        <span class="modal-title" id="modalTitle">Output preview</span>
+        <button class="icon" id="modalClose" style="padding:0 9px"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body"><pre class="code-pre" id="modalBody"></pre></div>
+      <div class="modal-ftr">
+        <button id="modalCopy"><i data-lucide="copy"></i>Copy</button>
+        <button class="primary" id="modalDownload"><i data-lucide="download"></i>Download</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="flash" id="flash"></div>
+
+  <!-- @inject:js -->
+</body>
+</html>

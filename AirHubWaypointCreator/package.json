@@ -1,0 +1,14 @@
+{
+  "name": "airhub-waypoint-creator",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Unified, offline-capable drone-mission planner: eight mission types in one self-contained AirHub-design tool.",
+  "scripts": {
+    "build": "node build/bundle.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED"
+}
