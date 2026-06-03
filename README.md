@@ -1,8 +1,15 @@
 # AirHub Mission Generator — Design System
 
-This project ships **one product**: a self-contained, client-side HTML tool that lets a drone operator generate a vertical-transect mission and export it as `mission.json`. No login, no backend, no DOC dashboard — just the tool and its visual system.
+> **Live site:** the repo root is a navigation hub (`index.html`) that links to each tool. The rest of this document is the **design system** that keeps every tool visually consistent.
 
-> **The whole product** is `ui_kits/mission_generator/index.html`. Everything else in this project (tokens, preview cards, SKILL.md) exists to keep that file consistent and to make future tools in the same family look + feel identical.
+## Tools
+
+| Tool | Path | What it is |
+| --- | --- | --- |
+| **AirHub Waypoint Creator** | [`/AirHubWaypointCreator/`](AirHubWaypointCreator/) | The unified planner — one switcher, **eight** mission types (vertical transect, corridor, polygon, facade, orbit, spiral, grid, double grid), interactive Leaflet map + live side-profile. The current flagship. |
+| **Vertical Transect Generator** | [`/vertical-transect/`](vertical-transect/) | The original single-purpose tool: an A↔B zig-zag that climbs in altitude steps then descends on a staggered offset, heading locked perpendicular toward a point of interest. |
+
+Both are **self-contained, client-side HTML** — they open in any browser, run entirely client-side, and export a `mission.json` consumable by AirHub's mission runner. No login, no backend, no dashboard.
 
 ## The app
 
@@ -138,35 +145,18 @@ Single line-icon set with consistent stroke. The Figma frame didn't ship the act
 
 ```
 /
-├── README.md                      ← you are here
-├── SKILL.md                       ← agent-skills entry point
-├── colors_and_type.css            ← all tokens + base styles
-├── assets/
-│   ├── logo-airhub.svg            ← wordmark (placeholder — flag for swap)
-│   └── logo-airhub-mark.svg       ← mark only
-├── preview/                       ← Design System tab cards
-│   ├── colors-surfaces.html
-│   ├── colors-accent.html
-│   ├── colors-semantic.html
-│   ├── colors-text.html
-│   ├── type-scale.html
-│   ├── type-label.html
-│   ├── spacing-scale.html
-│   ├── radii.html
-│   ├── borders.html
-│   ├── elevation.html
-│   ├── motion.html
-│   ├── component-buttons.html
-│   ├── component-badges.html
-│   ├── component-inputs.html
-│   ├── component-map-widget.html
-│   └── brand-logo.html
-├── ui_kits/mission_generator/     ← THE APP
+├── index.html              ← navigation hub (the site's landing page)
+├── .nojekyll               ← serve files verbatim (skip Jekyll processing)
+├── README.md               ← you are here
+├── AirHubWaypointCreator/  ← unified planner · 8 mission types
+│   ├── index.html          ← the app (self-contained bundle)
 │   ├── README.md
-│   └── index.html
-├── _source/                       ← original tool (do not edit)
-│   └── vertical_transect_generator_original.html
-└── _fig/Airhub/                   ← raw Figma extraction (do not edit)
+│   ├── package.json
+│   ├── build/              ← bundler output
+│   ├── src/                ← app source (app.html, app.js)
+│   └── _donor/             ← reference markup (not served)
+└── vertical-transect/      ← original single-purpose tool
+    └── index.html          ← the app (self-contained)
 ```
 
 ---
