@@ -217,6 +217,11 @@ reg({
     var last = coords[sideMap[legs[legs.length - 1].side]];
     if (Math.abs(legs[legs.length - 1].alt - c.minAlt) > 1e-9) out.push(wpPhoto(last.lat, last.lon, c.ground + c.minAlt, c.speed, heading, null, c));
     out.push(wpLanding(start.lat, start.lon, c.ground + c.minAlt, c.speed));
+    // AirHub's transect schema carries heading via the first waypoint's rotateYaw
+    // action + headingMode:'fixed', NOT a per-waypoint "heading" field. Drop the
+    // top-level heading the shared helpers add so the export matches the original
+    // vertical-transect tool exactly.
+    out.forEach(function (wp) { delete wp.heading; });
     return out;
   },
   drawMap: function (c, H) {
@@ -753,7 +758,9 @@ function toCSV(wps) {
   wps.forEach(function (wp, i) {
     var pitch = (wp.actions || []).reduce(function (acc, a) { return (a.parameters && a.parameters.gimbalRotate) ? a.parameters.gimbalRotate.pitch : acc; }, '');
     var trig = (wp.actions || []).some(function (a) { return a.type === 'takePhoto'; }) ? 'photo' : 'none';
-    rows.push([i + 1, wp.waypointType, wp.location.lat, wp.location.lon, wp.location.alt, pitch, wp.heading != null ? wp.heading : '', wp.headingMode, wp.speed, trig].join(','));
+    // heading lives on the waypoint for most types; for transect it's only in the rotateYaw action
+    var hdg = wp.heading != null ? wp.heading : (wp.actions || []).reduce(function (acc, a) { return (a.parameters && a.parameters.rotateYaw) ? a.parameters.rotateYaw.aircraftHeading : acc; }, '');
+    rows.push([i + 1, wp.waypointType, wp.location.lat, wp.location.lon, wp.location.alt, pitch, hdg, wp.headingMode, wp.speed, trig].join(','));
   });
   return rows.join('\n');
 }
