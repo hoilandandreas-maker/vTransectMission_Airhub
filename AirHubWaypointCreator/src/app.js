@@ -148,6 +148,31 @@ function wpPhoto(lat, lon, alt, spd, heading, pitch, ctx, extraActions) {
   if (acts.length) wp.actions = acts;
   return wp;
 }
+// Express heading the way AirHub's validated generators do, then strip the
+// working `heading` field the builders above attach (AirHub has no top-level
+// heading key). A fixed heading is commanded by a rotateYaw action and held via
+// headingMode:'fixed' (vertical-transect generator); towardPOI yaw rides on
+// poiCoordinate (orbit generator). For fixed legs a rotateYaw is emitted only
+// when the heading changes, so a constant-heading run yaws once then holds —
+// exactly like the donor transect, while varying-heading scans re-yaw per turn.
+function finalizeHeadings(out) {
+  var last = null;
+  out.forEach(function (wp) {
+    var h = wp.heading;
+    delete wp.heading;
+    if (wp.waypointType !== 'waypoint' || wp.headingMode !== 'fixed') { last = null; return; }
+    if (h == null) return;
+    var changed = last == null || Math.abs(((h - last + 540) % 360) - 180) > 0.01;
+    if (changed) {
+      wp.actions = wp.actions || [];
+      wp.actions.unshift(rotateYaw(h));
+      // keep action `order` unique + sequential (0,1,2…) as the validated generators do
+      wp.actions.forEach(function (a, ai) { a.order = ai; });
+      last = h;
+    }
+  });
+  return out;
+}
 
 /* ── transect heading (perpendicular to A-B, toward POI) ────────────────────*/
 function autoHeadingDetails(A, B, POI) {
@@ -211,18 +236,15 @@ reg({
     var coords = { A: c.A, B: c.B }, sideMap = c.startSide === 'A' ? { A: 'A', B: 'B' } : { A: 'B', B: 'A' };
     var start = coords[c.startSide], out = [wpTakeoff(start.lat, start.lon, c.ground + c.minAlt, c.speed)];
     var first = coords[sideMap[legs[0].side]];
-    var fw = wpPhoto(first.lat, first.lon, c.ground + legs[0].alt, c.speed, heading, null, c, [rotateYaw(heading)]);
-    out.push(fw);
+    out.push(wpPhoto(first.lat, first.lon, c.ground + legs[0].alt, c.speed, heading, null, c));
     for (var i = 1; i < legs.length; i++) { var p = coords[sideMap[legs[i].side]]; out.push(wpPhoto(p.lat, p.lon, c.ground + legs[i].alt, c.speed, heading, null, c)); }
     var last = coords[sideMap[legs[legs.length - 1].side]];
     if (Math.abs(legs[legs.length - 1].alt - c.minAlt) > 1e-9) out.push(wpPhoto(last.lat, last.lon, c.ground + c.minAlt, c.speed, heading, null, c));
     out.push(wpLanding(start.lat, start.lon, c.ground + c.minAlt, c.speed));
-    // AirHub's transect schema carries heading via the first waypoint's rotateYaw
-    // action + headingMode:'fixed', NOT a per-waypoint "heading" field. Drop the
-    // top-level heading the shared helpers add so the export matches the original
-    // vertical-transect tool exactly.
-    out.forEach(function (wp) { delete wp.heading; });
-    return out;
+    // Constant heading: finalizeHeadings yaws once on the first leg then holds,
+    // matching the vertical-transect generator (rotateYaw + headingMode:'fixed',
+    // no top-level "heading" field).
+    return finalizeHeadings(out);
   },
   drawMap: function (c, H) {
     H.line([[c.A.lat, c.A.lon], [c.B.lat, c.B.lon]], { color: '#4eadea', weight: 3, opacity: 0.9, dashArray: '6 6' });
@@ -296,7 +318,7 @@ reg({
     });
     if (c.nadir) { var acts = [gimbal(-90)]; if (trigShot(c)) acts.push(photo()); out.push({ location: loc(c.center.lat, c.center.lon, c.ground + c.nadirAlt), waypointType: 'waypoint', headingMode: 'fixed', heading: 0, speed: c.speed, actions: acts }); }
     out.push(wpLanding(first.lat, first.lon, c.ground, c.speed));
-    return out;
+    return finalizeHeadings(out);
   },
   drawMap: function (c, H) {
     var self = this, gR = c.globalRadius;
@@ -359,7 +381,7 @@ reg({
       out.push({ location: loc(p.lat, p.lon, c.ground + p.alt), waypointType: 'waypoint', headingMode: 'towardPOI', heading: 0, speed: c.speed, poiCoordinate: { lat: r7(c.center.lat), lon: r7(c.center.lon) }, actions: acts });
     });
     out.push(wpLanding(pts[0].lat, pts[0].lon, c.ground + c.altStart, c.speed));
-    return out;
+    return finalizeHeadings(out);
   },
   drawMap: function (c, H) {
     var pts = this.pathPts(c);
@@ -411,7 +433,7 @@ reg({
       flip = !flip;
     }
     out.push(wpLanding(g.A2.lat, g.A2.lon, c.ground + c.bottomAlt, c.speed));
-    return out;
+    return finalizeHeadings(out);
   },
   drawMap: function (c, H) {
     var g = this.geom(c);
@@ -445,7 +467,7 @@ function buildGridWps(c, axes, pitch) {
     });
   });
   if (first) out.push(wpLanding(first.lat, first.lon, c.ground, c.speed));
-  return out;
+  return finalizeHeadings(out);
 }
 function drawGridLanes(c, H, axes) {
   if (!c.vertices || c.vertices.length < 3) return;
@@ -532,7 +554,7 @@ reg({
       }
     });
     if (first) out.push(wpLanding(first.lat, first.lon, c.ground, c.speed));
-    return out;
+    return finalizeHeadings(out);
   },
   drawMap: function (c, H) {
     if (!c.vertices || c.vertices.length < 2) return;
@@ -573,7 +595,7 @@ reg({
       }
     }
     if (first) out.push(wpLanding(first.lat, first.lon, c.ground, c.speed));
-    return out;
+    return finalizeHeadings(out);
   },
   drawMap: function (c, H) {
     if (!c.vertices || c.vertices.length < 3) return;
