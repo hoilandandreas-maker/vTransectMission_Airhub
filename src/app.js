@@ -135,7 +135,13 @@ function loc(lat, lon, alt) { return { lat: r7(lat), lon: r7(lon), alt: r3(alt) 
 function gimbal(pitch) { return { type: 'rotateGimbal', order: 0, parameters: { rotateGimbal: { pitch: r1(pitch), roll: 0, yaw: 0 } } }; }
 function photo(order) { return { type: 'takePhoto', order: order == null ? 1 : order }; }
 function rotateYaw(h) { return { type: 'rotateYaw', order: 0, parameters: { rotateYaw: { aircraftHeading: r2(h), aircraftPathMode: 'clockwise' } } }; }
-function trigShot(ctx) { return ctx.trigger === 'waypoint'; }
+function trigShot(ctx) { return ctx.trigger === 'waypoint' || ctx.trigger === 'distance'; }
+// Photo spacing (m) used to densify a path. Distance mode → capture every photoDistance m;
+// waypoint mode → use the mission's own spacing field (0 = capture only at structural points).
+function photoStep(ctx, ownSpacing) {
+  if (ctx.trigger === 'distance') return Math.max(0.5, +ctx.photoDistance || 10);
+  return ownSpacing > 0 ? ownSpacing : 0;
+}
 function wpTakeoff(lat, lon, alt, spd) { return { location: loc(lat, lon, alt), waypointType: 'takeOff', headingMode: 'fixed', speed: spd }; }
 function wpLanding(lat, lon, alt, spd) { return { location: loc(lat, lon, alt), waypointType: 'landing', headingMode: 'fixed', speed: spd }; }
 function wpPhoto(lat, lon, alt, spd, heading, pitch, ctx, extraActions) {
@@ -408,7 +414,7 @@ reg({
   buildWaypoints: function (c) {
     var g = this.geom(c); if (g.len < 0.5 || c.wallHeight <= 0) return [];
     var vStep = c.vStep > 0 ? c.vStep : photoSpacingFor(c.standoff);
-    var hStep = c.hStep > 0 ? c.hStep : laneSpacingFor(c.standoff);
+    var hStep = photoStep(c, c.hStep > 0 ? c.hStep : laneSpacingFor(c.standoff)) || laneSpacingFor(c.standoff);
     var out = [wpTakeoff(g.A2.lat, g.A2.lon, c.ground + c.bottomAlt, c.speed)], flip = false;
     for (var alt = c.bottomAlt + vStep / 2; alt <= c.bottomAlt + c.wallHeight + 1e-9; alt += vStep) {
       var row = densify(g.A2, g.B2, hStep); if (flip) row = row.slice().reverse();
@@ -434,7 +440,7 @@ reg({
 function buildGridWps(c, axes, pitch) {
   if (!c.vertices || c.vertices.length < 3) return [];
   var alt = c.alt, spacing = c.laneSpacing > 0 ? c.laneSpacing : laneSpacingFor(alt);
-  var ps = c.photoSpacing != null ? c.photoSpacing : 0;
+  var ps = photoStep(c, c.photoSpacing != null ? c.photoSpacing : 0);
   var axisAuto = (c.laneAngle != null && isFinite(c.laneAngle)) ? c.laneAngle : longestEdgeBearing(c.vertices);
   var allLanes = [];
   axes.forEach(function (ax) { allLanes = allLanes.concat(laneEndpoints(c.vertices, (axisAuto + ax) % 360, spacing)); });
@@ -442,7 +448,7 @@ function buildGridWps(c, axes, pitch) {
   var out = [], started = false, first = null, total = 0;
   allLanes.forEach(function (lane) {
     var hd = bearing(lane[0].lat, lane[0].lon, lane[1].lat, lane[1].lon);
-    var pts = (ps > 0 && trigShot(c)) ? densify(lane[0], lane[1], ps) : lane;
+    var pts = ps > 0 ? densify(lane[0], lane[1], ps) : lane;
     pts.forEach(function (p) {
       if (total++ > 4000) return;
       if (!started) { first = p; out.push(wpTakeoff(p.lat, p.lon, c.ground, c.speed)); started = true; }
@@ -525,12 +531,12 @@ reg({
   },
   buildWaypoints: function (c) {
     if (!c.vertices || c.vertices.length < 2) return [];
-    var lanes = this.lanes(c), out = [], started = false, first = null, total = 0, ps = c.photoSpacing || 0;
+    var lanes = this.lanes(c), out = [], started = false, first = null, total = 0, ps = photoStep(c, c.photoSpacing || 0);
     lanes.forEach(function (lane, li) {
       var path = li % 2 ? lane.path.slice().reverse() : lane.path;
       for (var s = 0; s < path.length - 1; s++) {
         var hd = bearing(path[s].lat, path[s].lon, path[s + 1].lat, path[s + 1].lon);
-        var seg = (ps > 0 && trigShot(c)) ? densify(path[s], path[s + 1], ps) : [path[s], path[s + 1]];
+        var seg = ps > 0 ? densify(path[s], path[s + 1], ps) : [path[s], path[s + 1]];
         seg.forEach(function (p, idx) {
           if (s > 0 && idx === 0) return; // avoid duplicate vertex
           if (total++ > 4000) return;
@@ -570,7 +576,7 @@ reg({
   },
   buildWaypoints: function (c) {
     if (!c.vertices || c.vertices.length < 3) return [];
-    var L = this.loop(c), vs = L.vs.concat([L.vs[0]]), out = [], started = false, first = null, ps = c.pointSpacing || 0, total = 0;
+    var L = this.loop(c), vs = L.vs.concat([L.vs[0]]), out = [], started = false, first = null, ps = photoStep(c, c.pointSpacing || 0), total = 0;
     for (var s = 0; s < vs.length - 1; s++) {
       var seg = ps > 0 ? densify(vs[s], vs[s + 1], ps) : [vs[s], vs[s + 1]];
       for (var idx = 0; idx < seg.length; idx++) {
@@ -601,7 +607,7 @@ var state = {
   shared: {
     metadata: { operator: '', site: '', date: nowISO().slice(0, 10), notes: '' },
     flight: { speed: 2.0, ground: 0 },
-    camera: { preset: 'custom', trigger: 'waypoint', photoInterval: 2, frontOverlap: 80, sideOverlap: 70 },
+    camera: { preset: 'custom', trigger: 'waypoint', photoDistance: 10, frontOverlap: 80, sideOverlap: 70 },
     safety: { minAlt: 1, maxAlt: 400, maxSpeed: 15, geofence: false, geofenceRadius: 80 }
   },
   params: {},
@@ -619,7 +625,7 @@ function resolveContext(m) {
   ensureDefaults(m.id);
   var s = state.shared, ctx = {
     speed: s.flight.speed, ground: s.flight.ground,
-    trigger: s.camera.trigger, frontOverlap: s.camera.frontOverlap, sideOverlap: s.camera.sideOverlap,
+    trigger: s.camera.trigger, photoDistance: s.camera.photoDistance, frontOverlap: s.camera.frontOverlap, sideOverlap: s.camera.sideOverlap,
     camera: s.camera, safety: s.safety, metadata: s.metadata,
     vertices: state.geometry.vertices
   };
@@ -967,7 +973,7 @@ var PRESETS = {
 /* ── shared inputs <-> state ───────────────────────────────────────────────*/
 var SHARED_INPUTS = [
   ['speed', 'flight', 'speed', 'num'], ['ground', 'flight', 'ground', 'num'],
-  ['cameraPreset', 'camera', 'preset', 'str'], ['photoInterval', 'camera', 'photoInterval', 'num'],
+  ['cameraPreset', 'camera', 'preset', 'str'], ['photoDistance', 'camera', 'photoDistance', 'num'],
   ['frontOverlap', 'camera', 'frontOverlap', 'num'], ['sideOverlap', 'camera', 'sideOverlap', 'num'],
   ['minAltSafe', 'safety', 'minAlt', 'num'], ['maxAltSafe', 'safety', 'maxAlt', 'num'], ['maxSpeed', 'safety', 'maxSpeed', 'num'],
   ['geofenceRadius', 'safety', 'geofenceRadius', 'num'],
@@ -976,7 +982,7 @@ var SHARED_INPUTS = [
 function syncSharedInputs() {
   SHARED_INPUTS.forEach(function (s) { var v = state.shared[s[1]][s[2]]; $(s[0]).value = (v == null ? '' : v); });
   $('trigSeg').querySelectorAll('.seg-btn').forEach(function (b) { b.classList.toggle('on', b.dataset.trig === state.shared.camera.trigger); });
-  $('intervalField').style.display = state.shared.camera.trigger === 'interval' ? '' : 'none';
+  $('distanceField').style.display = state.shared.camera.trigger === 'distance' ? '' : 'none';
   $('togGeofence').classList.toggle('on', state.shared.safety.geofence);
   $('geofenceField').style.display = state.shared.safety.geofence ? '' : 'none';
   $('fmtTabs').querySelectorAll('.fmt-tab').forEach(function (b) { b.classList.toggle('on', b.dataset.fmt === state.outFmt); });

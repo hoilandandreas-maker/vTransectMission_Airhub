@@ -49,8 +49,10 @@ no login, no backend.
   switches, and map-vertex edits alike.
 - **Import / export settings** — save the full mission state to a JSON file and reload it
   later; legacy orbit-app settings files are migrated on import.
-- **Camera, safety, and metadata** — sensor preset and capture trigger, altitude/speed
-  limits and geofence, and operator/site/date/notes, all shared across mission types.
+- **Camera, safety, and metadata** — sensor preset and capture trigger (photo at every
+  waypoint, or at a fixed distance interval in metres — AirHub has no time-based trigger),
+  altitude/speed limits and geofence, and operator/site/date/notes, all shared across
+  mission types.
 - **Three export formats** — AirHub mission JSON, KML, and CSV, with copy, preview, and
   download.
 
