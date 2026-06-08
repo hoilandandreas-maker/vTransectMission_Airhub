@@ -136,15 +136,16 @@ function gimbal(pitch) { return { type: 'rotateGimbal', order: 0, parameters: { 
 function photo(order) { return { type: 'takePhoto', order: order == null ? 1 : order }; }
 function rotateYaw(h) { return { type: 'rotateYaw', order: 0, parameters: { rotateYaw: { aircraftHeading: r2(h), aircraftPathMode: 'clockwise' } } }; }
 function trigShot(ctx) { return ctx.trigger === 'waypoint'; }
-function wpTakeoff(lat, lon, alt, spd) { return { location: loc(lat, lon, alt), waypointType: 'takeOff', headingMode: 'fixed', heading: 0, speed: spd }; }
-function wpLanding(lat, lon, alt, spd) { return { location: loc(lat, lon, alt), waypointType: 'landing', headingMode: 'fixed', heading: 0, speed: spd }; }
-// generic photo waypoint with explicit heading + gimbal pitch
+function wpTakeoff(lat, lon, alt, spd) { return { location: loc(lat, lon, alt), waypointType: 'takeOff', headingMode: 'fixed', speed: spd }; }
+function wpLanding(lat, lon, alt, spd) { return { location: loc(lat, lon, alt), waypointType: 'landing', headingMode: 'fixed', speed: spd }; }
 function wpPhoto(lat, lon, alt, spd, heading, pitch, ctx, extraActions) {
-  var acts = [];
+  var hdg = r2(((heading % 360) + 360) % 360);
+  var acts = [rotateYaw(hdg)];
   if (pitch != null) acts.push(gimbal(pitch));
   if (extraActions) acts = acts.concat(extraActions);
   if (trigShot(ctx)) acts.push(photo());
-  var wp = { location: loc(lat, lon, alt), waypointType: 'waypoint', headingMode: 'fixed', heading: r2(((heading % 360) + 360) % 360), speed: spd };
+  acts.forEach(function (a, i) { a.order = i; });
+  var wp = { location: loc(lat, lon, alt), waypointType: 'waypoint', headingMode: 'fixed', speed: spd };
   if (acts.length) wp.actions = acts;
   return wp;
 }
@@ -211,17 +212,12 @@ reg({
     var coords = { A: c.A, B: c.B }, sideMap = c.startSide === 'A' ? { A: 'A', B: 'B' } : { A: 'B', B: 'A' };
     var start = coords[c.startSide], out = [wpTakeoff(start.lat, start.lon, c.ground + c.minAlt, c.speed)];
     var first = coords[sideMap[legs[0].side]];
-    var fw = wpPhoto(first.lat, first.lon, c.ground + legs[0].alt, c.speed, heading, null, c, [rotateYaw(heading)]);
+    var fw = wpPhoto(first.lat, first.lon, c.ground + legs[0].alt, c.speed, heading, null, c);
     out.push(fw);
     for (var i = 1; i < legs.length; i++) { var p = coords[sideMap[legs[i].side]]; out.push(wpPhoto(p.lat, p.lon, c.ground + legs[i].alt, c.speed, heading, null, c)); }
     var last = coords[sideMap[legs[legs.length - 1].side]];
     if (Math.abs(legs[legs.length - 1].alt - c.minAlt) > 1e-9) out.push(wpPhoto(last.lat, last.lon, c.ground + c.minAlt, c.speed, heading, null, c));
     out.push(wpLanding(start.lat, start.lon, c.ground + c.minAlt, c.speed));
-    // AirHub's transect schema carries heading via the first waypoint's rotateYaw
-    // action + headingMode:'fixed', NOT a per-waypoint "heading" field. Drop the
-    // top-level heading the shared helpers add so the export matches the original
-    // vertical-transect tool exactly.
-    out.forEach(function (wp) { delete wp.heading; });
     return out;
   },
   drawMap: function (c, H) {
@@ -288,13 +284,18 @@ reg({
     c.rings.forEach(function (ring, ri) {
       var radius = ring.radius != null ? ring.radius : gR;
       self.ringPts(c, radius, ri).forEach(function (pt) {
-        var hdg = self.wpHeading(c, pt), acts = [gimbal(ring.pitch)]; if (trigShot(c)) acts.push(photo());
-        var wp = { location: loc(pt.lat, pt.lon, c.ground + ring.alt), waypointType: 'waypoint', headingMode: c.yawMode === 'towardPOI' ? 'towardPOI' : 'fixed', heading: hdg != null ? r2(hdg) : 0, speed: c.speed, actions: acts };
+        var hdg = self.wpHeading(c, pt);
+        var acts = [];
+        if (hdg != null) acts.push(rotateYaw(r2(hdg)));
+        acts.push(gimbal(ring.pitch));
+        if (trigShot(c)) acts.push(photo());
+        acts.forEach(function (a, i) { a.order = i; });
+        var wp = { location: loc(pt.lat, pt.lon, c.ground + ring.alt), waypointType: 'waypoint', headingMode: c.yawMode === 'towardPOI' ? 'towardPOI' : 'fixed', speed: c.speed, actions: acts };
         if (c.yawMode === 'towardPOI') wp.poiCoordinate = { lat: r7(c.center.lat), lon: r7(c.center.lon) };
         out.push(wp);
       });
     });
-    if (c.nadir) { var acts = [gimbal(-90)]; if (trigShot(c)) acts.push(photo()); out.push({ location: loc(c.center.lat, c.center.lon, c.ground + c.nadirAlt), waypointType: 'waypoint', headingMode: 'fixed', heading: 0, speed: c.speed, actions: acts }); }
+    if (c.nadir) { var acts = [gimbal(-90)]; if (trigShot(c)) acts.push(photo()); acts.forEach(function (a, i) { a.order = i; }); out.push({ location: loc(c.center.lat, c.center.lon, c.ground + c.nadirAlt), waypointType: 'waypoint', headingMode: 'fixed', speed: c.speed, actions: acts }); }
     out.push(wpLanding(first.lat, first.lon, c.ground, c.speed));
     return out;
   },
@@ -356,7 +357,7 @@ reg({
     var out = [wpTakeoff(pts[0].lat, pts[0].lon, c.ground + c.altStart, c.speed)];
     pts.forEach(function (p) {
       var acts = [gimbal(p.pitch)]; if (trigShot(c)) acts.push(photo());
-      out.push({ location: loc(p.lat, p.lon, c.ground + p.alt), waypointType: 'waypoint', headingMode: 'towardPOI', heading: 0, speed: c.speed, poiCoordinate: { lat: r7(c.center.lat), lon: r7(c.center.lon) }, actions: acts });
+      out.push({ location: loc(p.lat, p.lon, c.ground + p.alt), waypointType: 'waypoint', headingMode: 'towardPOI', speed: c.speed, poiCoordinate: { lat: r7(c.center.lat), lon: r7(c.center.lon) }, actions: acts });
     });
     out.push(wpLanding(pts[0].lat, pts[0].lon, c.ground + c.altStart, c.speed));
     return out;
