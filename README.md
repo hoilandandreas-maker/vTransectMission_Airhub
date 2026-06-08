@@ -1,37 +1,131 @@
-# AirHub Mission Generator — Design System
+# AirHub Waypoint Creator
 
-> **Live site:** the repo root is a navigation hub (`index.html`) that links to each tool. The rest of this document is the **design system** that keeps every tool visually consistent.
+> **Live site:** the repository root **is** the app. Open `index.html` (or the deployed
+> site root) and you land directly in the planner — there is no landing page, no switcher
+> hub, just the mission planning tool.
 
-## Tools
+A single, offline-capable tool for planning drone missions. It merges two earlier
+generators — a circular-orbit (multi-ring) photogrammetry planner and a vertical-transect
+planner — into one app with a mission-type switcher, eight mission types, an interactive
+Leaflet map, a live side-profile, and a full set of planning power-features. It is dressed
+in the **AirHub design system**: a dark teal-navy tonal stack, Inter typography, hairline
+borders, and Lucide icons.
 
-| Tool | Path | What it is |
+The shipped `index.html` is a **self-contained bundle**. Leaflet, the Lucide icon set, and
+the Inter font family are embedded directly in the file, so the interface loads and runs
+with no network connection. The only thing that needs the network is the OpenStreetMap
+basemap imagery; without it the map still works, just without tiles. Every tool runs
+entirely client-side and exports a `mission.json` consumable by AirHub's mission runner —
+no login, no backend.
+
+## Mission types
+
+| Category | Type | What it plans |
 | --- | --- | --- |
-| **AirHub Waypoint Creator** | [`/AirHubWaypointCreator/`](AirHubWaypointCreator/) | The unified planner — one switcher, **eight** mission types (vertical transect, corridor, polygon, facade, orbit, spiral, grid, double grid), interactive Leaflet map + live side-profile. The current flagship. |
-| **Vertical Transect Generator** | [`/vertical-transect/`](vertical-transect/) | The original single-purpose tool: an A↔B zig-zag that climbs in altitude steps then descends on a staggered offset, heading locked perpendicular toward a point of interest. |
+| Line | **Vertical transect** | A↔B zig-zag that climbs in steps then descends on a staggered offset; first waypoint locks heading with `rotateYaw`. |
+| Line | **Corridor** | Symmetric offset lanes that follow a polyline (roads, pipelines, shorelines). |
+| Line | **Polygon perimeter** | A closed boundary loop at a fixed altitude, optionally inset inward, heading toward the centroid or fixed. |
+| Line | **Facade / wall scan** | Boustrophedon rows across a wall, offset from an A–B baseline by a standoff distance, camera facing the surface. |
+| Inspection | **Circular orbit** | One or more rings around a point of interest, each with its own altitude, radius, and gimbal pitch; POI / tangent / fixed heading; optional nadir pass. |
+| Inspection | **Spiral / helix** | A continuous climb-and-rotate around a point of interest over a set number of turns. |
+| Mapping | **Grid survey** | A lawnmower lane pattern over a polygon, lane spacing derived from sensor footprint and side overlap, nadir capture. |
+| Mapping | **Double grid** | A crosshatch — the grid pattern run twice at perpendicular axes for richer 3-D reconstruction. |
 
-Both are **self-contained, client-side HTML** — they open in any browser, run entirely client-side, and export a `mission.json` consumable by AirHub's mission runner. No login, no backend, no dashboard.
+## Features
 
-## The app
+- **One switcher, shared chrome** — pick a mission type; the left panel reflows to that
+  type's parameters while the map, stats, validation, and export stay in place.
+- **Interactive map** — click to set points (A / B / POI / center) or to drop polygon and
+  polyline corners; drag any marker to adjust. The basemap is tinted into the AirHub palette.
+- **Side profile** — an altitude-versus-distance profile (ascent and descent shaded
+  separately) for the types that vary altitude; a top-down note for the flat-altitude ones.
+- **Live stats** — waypoint count, photo count, segment count, ground distance, estimated
+  flight time, and maximum altitude, recomputed on every edit.
+- **Validation and safety** — out-of-range altitude or speed, and an optional geofence
+  radius, are flagged inline before you export.
+- **Presets** — per-type starting points (for example *Cliff face* and *Bridge* for
+  transect, *Tower* and *Building* for orbit, *Detailed* and *Overview* for grid).
+- **Undo / redo** — the whole mission state is snapshotted, so undo spans field edits, type
+  switches, and map-vertex edits alike.
+- **Import / export settings** — save the full mission state to a JSON file and reload it
+  later; legacy orbit-app settings files are migrated on import.
+- **Camera, safety, and metadata** — sensor preset and capture trigger, altitude/speed
+  limits and geofence, and operator/site/date/notes, all shared across mission types.
+- **Three export formats** — AirHub mission JSON, KML, and CSV, with copy, preview, and
+  download.
 
-`ui_kits/mission_generator/index.html` — opens in any browser, runs entirely client-side.
+## Using it
 
-- Pick **Point A** and **Point B** (the inspection line endpoints).
-- Pick a **POI** — the asset the drone faces (flare stack, wind turbine, bridge). Click the map to set it.
-- Set altitude range + ascent step.
-- The tool generates a zig-zag pattern: ascending pass between A↔B, then descending offset pass interleaved between ascent levels.
-- Heading auto-locks perpendicular to A↔B, oriented toward the POI.
-- Map + side-profile visualisation update live.
-- **Download `mission.json`** — a takeoff → waypoint sequence → landing schema consumable by AirHub's mission runner.
+Open `index.html` in any modern browser — double-click the file or serve the folder; no
+build step or server is required to *run* it. Then:
 
-The mission-generation math was lifted **unchanged** from the user's original tool (`_source/vertical_transect_generator_original.html`). Only the visual layer is new.
+1. Choose a mission type from the switcher.
+2. Set its geometry on the map (click to place or drop corners; drag to fine-tune).
+3. Adjust the type parameters, flight, camera, safety, and metadata as needed.
+4. Read the waypoint count, stats, and any validation messages.
+5. Pick an export format and use **Download** (or **Preview** to inspect first).
 
-## Sources
+All processing is local; nothing leaves the browser.
 
-- **Figma file** — `AirHub` (1 page, 301 nodes). Extracted to `_fig/Airhub/`. The reference frame defined the colors / type / token system.
-- **Original mission tool** — preserved at `_source/vertical_transect_generator_original.html`.
-- **No backend, no codebase, no auth.** Static HTML only.
+## Building
+
+The shipped `index.html` is generated — never hand-edit it. Edit the readable source in
+`src/`, then rebuild:
+
+```sh
+npm run build      # = node build/bundle.mjs
+```
+
+The build needs only Node 18 or newer (it uses `zlib` and `fs` from the standard library;
+there are no npm dependencies). It prints a `[bundle] OK` line and runs a round-trip
+self-test that re-extracts the template and decodes all twelve embedded assets.
+
+## How the bundle works
+
+```
+index.html              # SHIPPED self-contained bundle (generated + committed)
+.nojekyll               # serve files verbatim on GitHub Pages (skip Jekyll)
+src/
+  app.html              # readable markup + styles; references the 12 asset UUIDs;
+                        #   carries the <!-- @inject:js --> marker
+  app.js                # the entire application (one module, no dependencies)
+build/
+  bundle.mjs            # reassembles src/ into index.html (the build script)
+  vendor_head.html      # the document head (fonts + Leaflet CSS + vendor <script> tags)
+_donor/
+  vtransect_index.html  # asset source of truth: the original bundle whose embedded
+                        #   asset manifest (Leaflet, Lucide, Inter, marker images) is reused
+```
+
+The embedded assets live in a `<script type="__bundler/manifest">` block as gzip + base64
+data. A small loader runs on load, decodes each asset to a `blob:` URL, substitutes those
+URLs into the page template, and swaps in the result. `build/bundle.mjs` reuses the donor's
+loader and manifest verbatim and only swaps in the new template (`vendor_head.html` +
+`src/app.html` with `src/app.js` inlined), asserting that every asset UUID is still
+referenced and that the file round-trips before writing.
+
+`src/app.js` is organized as one module: geo helpers, camera models, a unified waypoint
+shape, a mission registry (each type declares its fields, defaults, geometry, waypoint
+builder, map drawing, validation, and summary), the map controller, the side profile, the
+exporters, the stats and validation, the dynamic panel renderer, the render loop, and the
+history / settings / modal plumbing. Adding a ninth mission type is a matter of registering
+one more entry.
+
+## Third-party assets
+
+The bundle embeds, and this project gratefully uses:
+
+- **Leaflet** (BSD-2-Clause) — the interactive map.
+- **Lucide** (ISC) — the icon set.
+- **Inter** (SIL Open Font License 1.1) — the typeface.
+
+Basemap imagery is © OpenStreetMap contributors and is fetched at runtime, not embedded.
 
 ---
+
+# Design system
+
+The rest of this document is the **design system** that keeps the app visually consistent.
 
 ## Content Fundamentals
 
@@ -54,8 +148,6 @@ Copy in this tool is **operational, calm, and precise** — the tone of an air-t
 | `Download mission.json` | `Get your flight plan! 🚀` |
 | `Mid→POI 245.32°` | `The point of interest is to the south-southwest` |
 | `22 passes · heading 192.93°` | `Will fly back and forth 22 times` |
-
----
 
 ## Visual Foundations
 
@@ -115,8 +207,6 @@ A **dark-only operations interface**, borrowing from cockpit avionics + modern d
 - ❌ Centered text in tool UI (it belongs only in empty states)
 - ❌ Bounce / spring animations
 
----
-
 ## Iconography
 
 Single line-icon set with consistent stroke. The Figma frame didn't ship the actual icon assets, so this system standardises on **Lucide** as the substitute — its 1.5px stroke + rounded line-caps + 24px viewBox match the AirHub aesthetic almost exactly.
@@ -132,38 +222,11 @@ Single line-icon set with consistent stroke. The Figma frame didn't ship the act
 - **Status indicators are NOT icons** — they're 6–8px filled circles in the semantic color.
 - **No emoji. No unicode glyphs as icons.** (Exception: `·` as a separator in single-line metadata: `Travel A→B 12.50° · Mid→POI 245.32°`.)
 
-### Icons used in the mission generator
-
-| Where | Lucide name |
-|---|---|
-| Download button | `download` |
-| Recalc heading button | `compass` |
-
----
-
-## Index — what's in this project
-
-```
-/
-├── index.html              ← navigation hub (the site's landing page)
-├── .nojekyll               ← serve files verbatim (skip Jekyll processing)
-├── README.md               ← you are here
-├── AirHubWaypointCreator/  ← unified planner · 8 mission types
-│   ├── index.html          ← the app (self-contained bundle)
-│   ├── README.md
-│   ├── package.json
-│   ├── build/              ← bundler output
-│   ├── src/                ← app source (app.html, app.js)
-│   └── _donor/             ← reference markup (not served)
-└── vertical-transect/      ← original single-purpose tool
-    └── index.html          ← the app (self-contained)
-```
-
 ---
 
 ## Next steps for iteration
 
-1. Replace `assets/logo-airhub.svg` with the real AirHub logo.
-2. Add additional mission patterns if needed (horizontal grid, orbit, ladder).
-3. Confirm the `mission.json` schema matches the AirHub mission runner expectations.
-4. Verify accent blue against the live AirHub dashboard if applicable.
+1. Confirm the `mission.json` schema matches the AirHub mission runner expectations.
+2. Add additional mission patterns if needed.
+3. Verify accent blue against the live AirHub dashboard if applicable.
+4. Replace the Lucide icon substitution with the real AirHub icon set if one exists.
