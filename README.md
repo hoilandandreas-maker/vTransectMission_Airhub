@@ -20,16 +20,16 @@ no login, no backend.
 
 ## Mission types
 
-| Category | Type | What it plans |
-| --- | --- | --- |
-| Line | **Vertical transect** | A↔B zig-zag that climbs in steps then descends on a staggered offset; first waypoint locks heading with `rotateYaw`. |
-| Line | **Corridor** | Symmetric offset lanes that follow a polyline (roads, pipelines, shorelines). |
-| Line | **Polygon perimeter** | A closed boundary loop at a fixed altitude, optionally inset inward, heading toward the centroid or fixed. |
-| Line | **Facade / wall scan** | Boustrophedon rows across a wall, offset from an A–B baseline by a standoff distance, camera facing the surface. |
-| Inspection | **Circular orbit** | One or more rings around a point of interest, each with its own altitude, radius, and gimbal pitch; POI / tangent / fixed heading; optional nadir pass. |
-| Inspection | **Spiral / helix** | A continuous climb-and-rotate around a point of interest over a set number of turns. |
-| Mapping | **Grid survey** | A lawnmower lane pattern over a polygon, lane spacing derived from sensor footprint and side overlap, nadir capture. |
-| Mapping | **Double grid** | A crosshatch — the grid pattern run twice at perpendicular axes for richer 3-D reconstruction. |
+| Category | Type | What it plans | Purpose / when to use |
+| --- | --- | --- | --- |
+| Line | **Vertical transect** | A↔B zig-zag that climbs in steps then descends on a staggered offset; first waypoint locks heading with `rotateYaw`. | Capture a tall vertical face — cliff, dam, building, ship hull — at even height intervals for inspection or 3D reconstruction. |
+| Line | **Corridor** | Symmetric offset lanes that follow a polyline (roads, pipelines, shorelines). | Map linear infrastructure — roads, railways, pipelines, power lines, rivers — with even coverage along the route. |
+| Line | **Polygon perimeter** | A closed boundary loop at a fixed altitude, optionally inset inward, heading toward the centroid or fixed. | Patrol or document the edge of a site — property line, construction site, stockpile, field — for security sweeps or boundary records. |
+| Line | **Facade / wall scan** | Boustrophedon rows across a wall, offset from an A–B baseline by a standoff distance, camera facing the surface. | Close-range coverage of a building face for crack detection, condition surveys, or facade orthomosaics. |
+| Inspection | **Circular orbit** | One or more rings around a point of interest, each with its own altitude, radius, and gimbal pitch; POI / tangent / fixed heading; optional nadir pass. | Photograph a structure — tower, turbine, monument, building — from every side at multiple heights for 360° inspection or photogrammetry. |
+| Inspection | **Spiral / helix** | A continuous climb-and-rotate around a point of interest over a set number of turns. | Smooth helical coverage of a tall asset — chimney, mast, wind turbine — without the stop-start of discrete orbit rings; good for video. |
+| Mapping | **Grid survey** | A lawnmower lane pattern over a polygon, lane spacing derived from sensor footprint and side overlap, nadir capture. | Standard aerial mapping — orthomosaics, elevation models, and area surveys. |
+| Mapping | **Double grid** | A crosshatch — the grid pattern run twice at perpendicular axes for richer 3-D reconstruction. | Detailed 3D reconstruction of buildings and complex terrain by capturing every feature from two directions. |
 
 ## Features
 

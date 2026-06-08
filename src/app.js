@@ -178,6 +178,7 @@ var DEMO = { lat: 58.92045759696814, lon: 5.7362006464208575 };
 /* ============================== MISSION: TRANSECT ========================= */
 reg({
   id: 'transect', label: 'Vertical transect', cat: 'Line', icon: 'arrow-up-down',
+  desc: 'Flies an A↔B zig-zag that climbs in altitude steps then descends on a staggered offset, camera locked toward a point of interest. Use it to capture a tall vertical face — cliff, dam, building, ship hull — at even height intervals for inspection or 3D reconstruction.',
   geometry: 'POINTS', hasProfile: true,
   points: [
     { key: 'A', label: 'A · start', color: 'var(--success)' },
@@ -245,6 +246,7 @@ reg({
 /* ============================== MISSION: ORBIT ============================ */
 reg({
   id: 'orbit', label: 'Circular orbit', cat: 'Inspection', icon: 'orbit',
+  desc: 'Flies one or more rings around a point of interest, each ring at its own altitude, radius and gimbal pitch. Use it to photograph a structure — tower, turbine, monument, building — from every side at multiple heights for 360° inspection or photogrammetry.',
   geometry: 'POINTS', hasProfile: true,
   points: [{ key: 'center', label: 'Center · POI', color: 'var(--accent-light)' }],
   defaults: {
@@ -324,6 +326,7 @@ reg({
 /* ============================== MISSION: SPIRAL =========================== */
 reg({
   id: 'spiral', label: 'Spiral / helix', cat: 'Inspection', icon: 'tornado',
+  desc: 'Flies a continuous climb-and-rotate around a point of interest over a set number of turns, gimbal pitch easing as it rises. Use it for smooth helical coverage of a tall asset — chimney, mast, wind turbine — without the stop-start of discrete orbit rings; good for video and dense capture.',
   geometry: 'POINTS', hasProfile: true,
   points: [{ key: 'center', label: 'Center · POI', color: 'var(--accent-light)' }],
   defaults: {
@@ -375,6 +378,7 @@ reg({
 /* ============================== MISSION: FACADE =========================== */
 reg({
   id: 'facade', label: 'Facade / wall scan', cat: 'Line', icon: 'building-2',
+  desc: 'Flies boustrophedon (lawnmower) rows across a flat wall, offset from an A–B baseline by a fixed standoff distance, camera facing the surface. Use it for systematic close-range coverage of a building face — crack detection, condition surveys, or facade orthomosaics.',
   geometry: 'POINTS', hasProfile: true,
   points: [
     { key: 'A', label: 'Wall A', color: 'var(--success)' },
@@ -460,6 +464,7 @@ function drawGridLanes(c, H, axes) {
 }
 reg({
   id: 'grid', label: 'Grid survey', cat: 'Mapping', icon: 'grid-3x3',
+  desc: 'Flies parallel lawnmower lanes over a polygon area with the camera pointing straight down, lane spacing derived from sensor footprint and overlap. The standard mapping pattern — orthomosaics, elevation models, and area surveys.',
   geometry: 'POLYGON', hasProfile: false,
   defaults: { alt: 40, laneSpacing: 0, photoSpacing: 0, laneAngle: null, pitch: -90 },
   fields: [
@@ -476,6 +481,7 @@ reg({
 });
 reg({
   id: 'doubleGrid', label: 'Double grid', cat: 'Mapping', icon: 'layout-grid',
+  desc: 'Flies the grid pattern twice at perpendicular axes (a crosshatch), usually with an oblique gimbal angle. Use it for richer 3D reconstruction of buildings and complex terrain by capturing every feature from two directions.',
   geometry: 'POLYGON', hasProfile: false,
   defaults: { alt: 40, laneSpacing: 0, photoSpacing: 0, laneAngle: null, pitch: -60 },
   fields: [
@@ -494,6 +500,7 @@ reg({
 /* ============================== MISSION: CORRIDOR ========================= */
 reg({
   id: 'corridor', label: 'Corridor', cat: 'Line', icon: 'route',
+  desc: 'Flies symmetric parallel lanes that follow a polyline path. Use it to map linear infrastructure — roads, railways, pipelines, power lines, rivers, shorelines — with even coverage along the whole route.',
   geometry: 'POLYLINE', hasProfile: false,
   defaults: { alt: 40, laneCount: 3, laneSpacing: 10, photoSpacing: 0, pitch: -90 },
   fields: [
@@ -546,6 +553,7 @@ reg({
 /* ============================== MISSION: PERIMETER ======================== */
 reg({
   id: 'perimeter', label: 'Polygon perimeter', cat: 'Line', icon: 'hexagon',
+  desc: 'Flies a closed boundary loop at a fixed altitude, optionally inset inward, camera facing the centroid or a fixed heading. Use it to patrol or document the edge of a site — property line, construction site, stockpile, field — for security sweeps or boundary records.',
   geometry: 'POLYGON', hasProfile: false,
   defaults: { alt: 30, inset: 0, pointSpacing: 0, pitch: -30, faceCenter: true },
   fields: [
@@ -899,6 +907,7 @@ function fieldEl(f, value, onInput) {
 }
 function renderTypeParams() {
   var m = activeMission(); ensureDefaults(m.id); var p = state.params[m.id], host = $('typeParams'); host.innerHTML = '';
+  if (m.desc) { var d = document.createElement('div'); d.className = 'mission-desc'; d.textContent = m.desc; host.appendChild(d); }
   var g = document.createElement('div'); g.className = 'group';
   var gt = document.createElement('div'); gt.className = 'group-title'; gt.textContent = m.label + ' parameters'; g.appendChild(gt);
   var grid = document.createElement('div'); grid.className = 'grid-2'; g.appendChild(grid);
