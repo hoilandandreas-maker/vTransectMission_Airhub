@@ -254,7 +254,8 @@
     #map { flex: 1; min-height: 0; filter: hue-rotate(180deg) invert(1) brightness(0.85) contrast(0.95) saturate(0.4); }
     .leaflet-control-attribution, .leaflet-popup-content-wrapper, .leaflet-popup-tip, .leaflet-control-zoom a, .leaflet-tooltip { filter: invert(1) hue-rotate(180deg); }
     .leaflet-tooltip { background: var(--bg-panel) !important; color: var(--text-primary) !important; border: 0.5px solid var(--border-emphasis) !important; box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important; font: 500 11px/1 var(--font-sans) !important; }
-    .leaflet-container { background: var(--bg-elevated) !important; }
+    .leaflet-container { background: var(--bg-elevated) !important; cursor: pointer !important; }
+    .leaflet-dragging .leaflet-container { cursor: grabbing !important; }
 
     .profile-wrap { height: 168px; flex-shrink: 0; }
     .profile-wrap .pane-body { flex: 1; padding: 10px 12px; display: flex; min-height: 0; }
@@ -362,7 +363,7 @@
         <div class="group-title">Flight</div>
         <div class="grid-2">
           <div class="field"><label>Speed (m/s)</label><input type="number" step="0.5" min="0.5" id="speed"></div>
-          <div class="field"><label>Ground (m AMSL)</label><input type="number" step="any" id="ground"></div>
+          <div class="field"><label>Ground (m AMSL)</label><div style="display:flex;gap:5px;align-items:center"><input type="number" step="any" id="ground" style="flex:1"><button id="btnElevation" title="Fetch elevation from map centre" style="height:var(--input-height);padding:0 8px;flex-shrink:0;font-size:13px">↓</button></div></div>
         </div>
       </div>
 
@@ -372,14 +373,12 @@
         <div class="collapsible" id="sec-cam">
           <div class="grid-2">
             <div class="field">
-              <label>Camera preset</label>
-              <select id="cameraPreset">
-                <option value="custom">Custom</option>
-                <option value="x7_24">Zenmuse X7 24mm</option>
-                <option value="x7_35">Zenmuse X7 35mm</option>
-                <option value="p1_35">Zenmuse P1 35mm</option>
-                <option value="p1_50">Zenmuse P1 50mm</option>
-                <option value="m3e">Mavic 3E (4/3")</option>
+              <label>Lens</label>
+              <select id="cameraLens">
+                <option value="wide">Wide</option>
+                <option value="narrowband">Narrowband</option>
+                <option value="infrared">Infrared</option>
+                <option value="zoom">Zoom</option>
               </select>
             </div>
             <div class="field">
@@ -399,38 +398,6 @@
             <div class="field"><label>Side overlap (%)</label><input type="number" step="5" min="0" max="95" id="sideOverlap"></div>
           </div>
           <div class="hint">Overlap drives lane &amp; photo spacing for grid / corridor / facade missions when no explicit spacing is set.</div>
-        </div>
-      </div>
-
-      <!-- Shared: Safety constraints (collapsible) -->
-      <div class="group">
-        <div class="section-label" data-sec="safety">Safety constraints <span class="sa">&#x25be;</span></div>
-        <div class="collapsible" id="sec-safety">
-          <div class="grid-3">
-            <div class="field"><label>Min alt (m)</label><input type="number" step="1" min="0" id="minAltSafe"></div>
-            <div class="field"><label>Max alt (m)</label><input type="number" step="5" id="maxAltSafe"></div>
-            <div class="field"><label>Max speed</label><input type="number" step="0.5" min="0.5" id="maxSpeed"></div>
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">Geofence — block export beyond radius</span>
-            <div class="toggle" id="togGeofence"></div>
-          </div>
-          <div class="field" id="geofenceField" style="display:none;max-width:180px">
-            <label>Geofence radius (m)</label><input type="number" step="5" min="1" id="geofenceRadius">
-          </div>
-        </div>
-      </div>
-
-      <!-- Shared: Mission metadata (collapsible) -->
-      <div class="group">
-        <div class="section-label" data-sec="meta">Mission metadata <span class="sa">&#x25be;</span></div>
-        <div class="collapsible" id="sec-meta">
-          <div class="grid-2">
-            <div class="field"><label>Operator</label><input type="text" id="metaOperator" placeholder="Name"></div>
-            <div class="field"><label>Site / asset</label><input type="text" id="metaSite" placeholder="Site"></div>
-          </div>
-          <div class="field"><label>Date</label><input type="text" id="metaDate" readonly></div>
-          <div class="field"><label>Notes</label><textarea id="metaNotes" placeholder="Optional mission notes"></textarea></div>
         </div>
       </div>
 
