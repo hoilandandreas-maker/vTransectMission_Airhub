@@ -132,7 +132,7 @@ function photoSpacingFor(alt) {
 
 /* ── waypoint helpers ──────────────────────────────────────────────────────*/
 function loc(lat, lon, alt) { return { lat: r7(lat), lon: r7(lon), alt: r3(alt) }; }
-function gimbal(pitch) { return { type: 'rotateGimbal', order: 0, parameters: { rotateGimbal: { pitch: r1(pitch), roll: 0, yaw: 0 } } }; }
+function gimbal(pitch) { return { type: 'gimbalRotate', order: 0, parameters: { gimbalRotate: { pitch: r1(pitch), roll: 0, yaw: 0 } } }; }
 function photo(order) { return { type: 'takePhoto', order: order == null ? 1 : order }; }
 function rotateYaw(h) { return { type: 'rotateYaw', order: 0, parameters: { rotateYaw: { aircraftHeading: r2(h), aircraftPathMode: 'clockwise' } } }; }
 function trigShot(ctx) { return ctx.trigger === 'waypoint' || ctx.trigger === 'distance'; }
@@ -748,7 +748,7 @@ function toKML(wps, ctx) {
   var site = ctx.metadata.site || 'AirHub Mission';
   var lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>', '  <name>' + site + '</name>', '  <description>Generated ' + nowISO() + '</description>', '  <Style id="wp"><IconStyle><scale>0.8</scale></IconStyle></Style>', '  <Style id="path"><LineStyle><color>ffba7c1a</color><width>2</width></LineStyle></Style>'];
   wps.forEach(function (wp, i) {
-    var p = (wp.actions && wp.actions[0] && wp.actions[0].parameters && wp.actions[0].parameters.rotateGimbal) ? wp.actions[0].parameters.rotateGimbal.pitch : '';
+    var p = (wp.actions && wp.actions[0] && wp.actions[0].parameters && wp.actions[0].parameters.gimbalRotate) ? wp.actions[0].parameters.gimbalRotate.pitch : '';
     lines.push('  <Placemark><styleUrl>#wp</styleUrl>', '    <name>WP' + (i + 1) + ' ' + wp.waypointType + '</name>', '    <description>alt:' + wp.location.alt + 'm pitch:' + p + ' spd:' + wp.speed + '</description>', '    <Point><altitudeMode>relativeToGround</altitudeMode>', '      <coordinates>' + wp.location.lon + ',' + wp.location.lat + ',' + wp.location.alt + '</coordinates>', '    </Point></Placemark>');
   });
   lines.push('  <Placemark><styleUrl>#path</styleUrl><name>Flight path</name>', '    <LineString><altitudeMode>relativeToGround</altitudeMode>', '      <coordinates>' + wps.map(function (w) { return w.location.lon + ',' + w.location.lat + ',' + w.location.alt; }).join(' ') + '</coordinates>', '    </LineString></Placemark>', '</Document></kml>');
@@ -757,7 +757,7 @@ function toKML(wps, ctx) {
 function toCSV(wps) {
   var rows = ['index,type,latitude,longitude,altitude_m,pitch_deg,heading_deg,heading_mode,speed_mps,trigger'];
   wps.forEach(function (wp, i) {
-    var pitch = (wp.actions || []).reduce(function (acc, a) { return (a.parameters && a.parameters.rotateGimbal) ? a.parameters.rotateGimbal.pitch : acc; }, '');
+    var pitch = (wp.actions || []).reduce(function (acc, a) { return (a.parameters && a.parameters.gimbalRotate) ? a.parameters.gimbalRotate.pitch : acc; }, '');
     var trig = (wp.actions || []).some(function (a) { return a.type === 'takePhoto'; }) ? 'photo' : 'none';
     // heading lives on the waypoint for most types; for transect it's only in the rotateYaw action
     var hdg = wp.heading != null ? wp.heading : (wp.actions || []).reduce(function (acc, a) { return (a.parameters && a.parameters.rotateYaw) ? a.parameters.rotateYaw.aircraftHeading : acc; }, '');
