@@ -101,6 +101,23 @@ function photoStep(ctx, ownSpacing) {
   if (ctx.trigger === 'distance') return Math.max(0.5, +ctx.photoDistance || 10);
   return ownSpacing > 0 ? ownSpacing : 0;
 }
+function dedupeYaw(wps) {
+  var lastHdg = null;
+  wps.forEach(function (wp) {
+    if (wp.headingMode !== 'fixed' || !wp.actions) return;
+    var idx = -1;
+    wp.actions.forEach(function (a, i) { if (a.type === 'rotateYaw') idx = i; });
+    if (idx === -1) return;
+    var hdg = wp.actions[idx].parameters.rotateYaw.aircraftHeading;
+    if (hdg === lastHdg) {
+      wp.actions.splice(idx, 1);
+      wp.actions.forEach(function (a, i) { a.order = i; });
+    } else {
+      lastHdg = hdg;
+    }
+  });
+  return wps;
+}
 function wpPhoto(lat, lon, alt, spd, heading, pitch, ctx, extraActions) {
   var hdg = r2(((heading % 360) + 360) % 360);
   var acts = [rotateYaw(hdg)];
@@ -865,6 +882,7 @@ function render() {
   var m = activeMission(); $('crumbType').textContent = m.label;
   var ctx = resolveContext(m); var wps = [];
   try { wps = m.buildWaypoints(ctx) || []; } catch (e) { console.error('build', e); }
+  wps = dedupeYaw(wps);
   state.lastWps = wps;
   mapCtrl.draw(m, ctx, wps);
   if (m.hasProfile) { $('profilePane').style.display = ''; drawProfile(ctx, wps, m); } else { showTopDownNote(m); }
@@ -877,8 +895,28 @@ function render() {
   $('summary').textContent = wps.length ? (wps.length + ' wp · ' + (m.summary ? m.summary(ctx, wps) : '')) : 'no waypoints';
   $('btnDownload').disabled = errs.length > 0 || wps.length === 0;
   icons();
+  // auto-fetch ground elevation when mission centre moves > 50 m
+  var elevPt = centerOf(m, ctx);
+  if (elevPt) {
+    var moved = !lastElevPt || dist(lastElevPt.lat, lastElevPt.lon, elevPt.lat, elevPt.lon) > 50;
+    if (moved) {
+      lastElevPt = { lat: elevPt.lat, lon: elevPt.lon };
+      clearTimeout(elevTimer);
+      elevTimer = setTimeout(function () { autoFetchElevation(elevPt); }, 1200);
+    }
+  }
 }
 var histTimer;
+var elevTimer, lastElevPt = null;
+function autoFetchElevation(pt) {
+  fetch('https://api.open-meteo.com/v1/elevation?latitude=' + pt.lat + '&longitude=' + pt.lon)
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var elev = data.elevation && data.elevation[0];
+      if (elev != null) { state.shared.flight.ground = Math.round(elev * 10) / 10; $('ground').value = state.shared.flight.ground; render(); }
+    })
+    .catch(function () { /* silent on auto-fetch failure */ });
+}
 function schedule() { render(); clearTimeout(histTimer); histTimer = setTimeout(saveHist, 600); }
 function icons() { if (window.lucide) try { lucide.createIcons(); } catch (e) {} }
 
@@ -975,16 +1013,8 @@ function init() {
     var m = activeMission(), ctx = resolveContext(m);
     var pt = centerOf(m, ctx);
     if (!pt) { var mc = mapCtrl.getCenter(); pt = { lat: mc.lat, lon: mc.lng }; }
-    var btn = $('btnElevation'); btn.disabled = true; btn.textContent = '…';
-    fetch('https://api.open-meteo.com/v1/elevation?latitude=' + pt.lat + '&longitude=' + pt.lon)
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        var elev = data.elevation && data.elevation[0];
-        if (elev != null) { state.shared.flight.ground = Math.round(elev * 10) / 10; $('ground').value = state.shared.flight.ground; schedule(); flash('✓ Ground: ' + state.shared.flight.ground + ' m AMSL'); }
-        else flash('✕ No elevation data', true);
-      })
-      .catch(function () { flash('✕ Elevation fetch failed', true); })
-      .finally(function () { btn.disabled = false; btn.textContent = '↓'; });
+    lastElevPt = null; // force re-fetch even if centre hasn't moved
+    autoFetchElevation(pt);
   };
   $('btnPreview').onclick = previewOutput;
   $('modalClose').onclick = function () { $('modalBg').classList.remove('open'); };
