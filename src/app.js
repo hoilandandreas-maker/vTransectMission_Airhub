@@ -639,7 +639,7 @@ function showTopDownNote(m) {
 }
 
 /* ── export (AirHub / KML / CSV) ───────────────────────────────────────────*/
-function toAirHub(wps) { return JSON.stringify({ lens: state.shared.camera.lens, waypoints: wps }, null, 2); }
+function toAirHub(wps) { return JSON.stringify(wps, null, 2); }
 function toKML(wps, ctx) {
   var site = 'AirHub Mission';
   var lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>', '  <name>' + site + '</name>', '  <description>Generated ' + nowISO() + '</description>', '  <Style id="wp"><IconStyle><scale>0.8</scale></IconStyle></Style>', '  <Style id="path"><LineStyle><color>ffba7c1a</color><width>2</width></LineStyle></Style>'];
