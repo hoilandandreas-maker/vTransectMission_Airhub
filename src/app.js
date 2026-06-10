@@ -132,7 +132,7 @@ function photoSpacingFor(alt) {
 
 /* ── waypoint helpers ──────────────────────────────────────────────────────*/
 function loc(lat, lon, alt) { return { lat: r7(lat), lon: r7(lon), alt: r3(alt) }; }
-function gimbal(pitch) { return { type: 'rotateGimbal', order: 0, parameters: { rotateGimbal: { pitch: r1(pitch), roll: 0, yaw: 0 } } }; }
+function gimbal(pitch) { return { type: 'gimbalRotate', order: 0, parameters: { gimbalRotate: { pitch: r1(pitch), roll: 0, yaw: 0 } } }; }
 function photo(order) { return { type: 'takePhoto', order: order == null ? 1 : order }; }
 function rotateYaw(h) { return { type: 'rotateYaw', order: 0, parameters: { rotateYaw: { aircraftHeading: r2(h), aircraftPathMode: 'clockwise' } } }; }
 function trigShot(ctx) { return ctx.trigger === 'waypoint' || ctx.trigger === 'distance'; }
@@ -142,8 +142,6 @@ function photoStep(ctx, ownSpacing) {
   if (ctx.trigger === 'distance') return Math.max(0.5, +ctx.photoDistance || 10);
   return ownSpacing > 0 ? ownSpacing : 0;
 }
-function wpTakeoff(lat, lon, alt, spd) { return { location: loc(lat, lon, alt), waypointType: 'takeOff', headingMode: 'fixed', speed: spd }; }
-function wpLanding(lat, lon, alt, spd) { return { location: loc(lat, lon, alt), waypointType: 'landing', headingMode: 'fixed', speed: spd }; }
 function wpPhoto(lat, lon, alt, spd, heading, pitch, ctx, extraActions) {
   var hdg = r2(((heading % 360) + 360) % 360);
   var acts = [rotateYaw(hdg)];
@@ -217,14 +215,13 @@ reg({
     var heading = (c.heading != null && isFinite(c.heading)) ? c.heading : hd.heading;
     var legs = this.zigzag(c.minAlt, c.maxAlt, c.upStep);
     var coords = { A: c.A, B: c.B }, sideMap = c.startSide === 'A' ? { A: 'A', B: 'B' } : { A: 'B', B: 'A' };
-    var start = coords[c.startSide], out = [wpTakeoff(start.lat, start.lon, c.ground + c.minAlt, c.speed)];
+    var out = [];
     var first = coords[sideMap[legs[0].side]];
     var fw = wpPhoto(first.lat, first.lon, c.ground + legs[0].alt, c.speed, heading, null, c);
     out.push(fw);
     for (var i = 1; i < legs.length; i++) { var p = coords[sideMap[legs[i].side]]; out.push(wpPhoto(p.lat, p.lon, c.ground + legs[i].alt, c.speed, heading, null, c)); }
     var last = coords[sideMap[legs[legs.length - 1].side]];
     if (Math.abs(legs[legs.length - 1].alt - c.minAlt) > 1e-9) out.push(wpPhoto(last.lat, last.lon, c.ground + c.minAlt, c.speed, heading, null, c));
-    out.push(wpLanding(start.lat, start.lon, c.ground + c.minAlt, c.speed));
     return out;
   },
   drawMap: function (c, H) {
@@ -287,8 +284,6 @@ reg({
   buildWaypoints: function (c) {
     if (!c.rings || !c.rings.length) return [];
     var self = this, gR = c.globalRadius, out = [];
-    var first = this.ringPts(c, (c.rings[0].radius != null ? c.rings[0].radius : gR), 0)[0];
-    out.push(wpTakeoff(first.lat, first.lon, c.ground, c.speed));
     c.rings.forEach(function (ring, ri) {
       var radius = ring.radius != null ? ring.radius : gR;
       self.ringPts(c, radius, ri).forEach(function (pt) {
@@ -304,7 +299,6 @@ reg({
       });
     });
     if (c.nadir) { var acts = [gimbal(-90)]; if (trigShot(c)) acts.push(photo()); acts.forEach(function (a, i) { a.order = i; }); out.push({ location: loc(c.center.lat, c.center.lon, c.ground + c.nadirAlt), waypointType: 'waypoint', headingMode: 'fixed', speed: c.speed, actions: acts }); }
-    out.push(wpLanding(first.lat, first.lon, c.ground, c.speed));
     return out;
   },
   drawMap: function (c, H) {
@@ -363,12 +357,11 @@ reg({
   },
   buildWaypoints: function (c) {
     var pts = this.pathPts(c); if (!pts.length) return [];
-    var out = [wpTakeoff(pts[0].lat, pts[0].lon, c.ground + c.altStart, c.speed)];
+    var out = [];
     pts.forEach(function (p) {
       var acts = [gimbal(p.pitch)]; if (trigShot(c)) acts.push(photo());
       out.push({ location: loc(p.lat, p.lon, c.ground + p.alt), waypointType: 'waypoint', headingMode: 'towardPOI', speed: c.speed, poiCoordinate: { lat: r7(c.center.lat), lon: r7(c.center.lon) }, actions: acts });
     });
-    out.push(wpLanding(pts[0].lat, pts[0].lon, c.ground + c.altStart, c.speed));
     return out;
   },
   drawMap: function (c, H) {
@@ -415,13 +408,12 @@ reg({
     var g = this.geom(c); if (g.len < 0.5 || c.wallHeight <= 0) return [];
     var vStep = c.vStep > 0 ? c.vStep : photoSpacingFor(c.standoff);
     var hStep = photoStep(c, c.hStep > 0 ? c.hStep : laneSpacingFor(c.standoff)) || laneSpacingFor(c.standoff);
-    var out = [wpTakeoff(g.A2.lat, g.A2.lon, c.ground + c.bottomAlt, c.speed)], flip = false;
+    var out = [], flip = false;
     for (var alt = c.bottomAlt + vStep / 2; alt <= c.bottomAlt + c.wallHeight + 1e-9; alt += vStep) {
       var row = densify(g.A2, g.B2, hStep); if (flip) row = row.slice().reverse();
       row.forEach(function (p) { out.push(wpPhoto(p.lat, p.lon, c.ground + alt, c.speed, g.look, c.pitch, c)); });
       flip = !flip;
     }
-    out.push(wpLanding(g.A2.lat, g.A2.lon, c.ground + c.bottomAlt, c.speed));
     return out;
   },
   drawMap: function (c, H) {
@@ -445,17 +437,15 @@ function buildGridWps(c, axes, pitch) {
   var allLanes = [];
   axes.forEach(function (ax) { allLanes = allLanes.concat(laneEndpoints(c.vertices, (axisAuto + ax) % 360, spacing)); });
   if (!allLanes.length) return [];
-  var out = [], started = false, first = null, total = 0;
+  var out = [], total = 0;
   allLanes.forEach(function (lane) {
     var hd = bearing(lane[0].lat, lane[0].lon, lane[1].lat, lane[1].lon);
     var pts = ps > 0 ? densify(lane[0], lane[1], ps) : lane;
     pts.forEach(function (p) {
       if (total++ > 4000) return;
-      if (!started) { first = p; out.push(wpTakeoff(p.lat, p.lon, c.ground, c.speed)); started = true; }
       out.push(wpPhoto(p.lat, p.lon, c.ground + alt, c.speed, hd, pitch != null ? pitch : c.pitch, c));
     });
   });
-  if (first) out.push(wpLanding(first.lat, first.lon, c.ground, c.speed));
   return out;
 }
 function drawGridLanes(c, H, axes) {
@@ -531,7 +521,7 @@ reg({
   },
   buildWaypoints: function (c) {
     if (!c.vertices || c.vertices.length < 2) return [];
-    var lanes = this.lanes(c), out = [], started = false, first = null, total = 0, ps = photoStep(c, c.photoSpacing || 0);
+    var lanes = this.lanes(c), out = [], total = 0, ps = photoStep(c, c.photoSpacing || 0);
     lanes.forEach(function (lane, li) {
       var path = li % 2 ? lane.path.slice().reverse() : lane.path;
       for (var s = 0; s < path.length - 1; s++) {
@@ -540,12 +530,10 @@ reg({
         seg.forEach(function (p, idx) {
           if (s > 0 && idx === 0) return; // avoid duplicate vertex
           if (total++ > 4000) return;
-          if (!started) { first = p; out.push(wpTakeoff(p.lat, p.lon, c.ground, c.speed)); started = true; }
           out.push(wpPhoto(p.lat, p.lon, c.ground + c.alt, c.speed, hd, c.pitch, c));
         });
       }
     });
-    if (first) out.push(wpLanding(first.lat, first.lon, c.ground, c.speed));
     return out;
   },
   drawMap: function (c, H) {
@@ -576,18 +564,16 @@ reg({
   },
   buildWaypoints: function (c) {
     if (!c.vertices || c.vertices.length < 3) return [];
-    var L = this.loop(c), vs = L.vs.concat([L.vs[0]]), out = [], started = false, first = null, ps = photoStep(c, c.pointSpacing || 0), total = 0;
+    var L = this.loop(c), vs = L.vs.concat([L.vs[0]]), out = [], ps = photoStep(c, c.pointSpacing || 0), total = 0;
     for (var s = 0; s < vs.length - 1; s++) {
       var seg = ps > 0 ? densify(vs[s], vs[s + 1], ps) : [vs[s], vs[s + 1]];
       for (var idx = 0; idx < seg.length; idx++) {
         if (s > 0 && idx === 0) continue;
         var p = seg[idx]; if (total++ > 4000) break;
         var hd = c.faceCenter ? bearing(p.lat, p.lon, L.ctr.lat, L.ctr.lon) : bearing(vs[s].lat, vs[s].lon, vs[s + 1].lat, vs[s + 1].lon);
-        if (!started) { first = p; out.push(wpTakeoff(p.lat, p.lon, c.ground, c.speed)); started = true; }
         out.push(wpPhoto(p.lat, p.lon, c.ground + c.alt, c.speed, hd, c.pitch, c));
       }
     }
-    if (first) out.push(wpLanding(first.lat, first.lon, c.ground, c.speed));
     return out;
   },
   drawMap: function (c, H) {
@@ -762,7 +748,7 @@ function toKML(wps, ctx) {
   var site = ctx.metadata.site || 'AirHub Mission';
   var lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>', '  <name>' + site + '</name>', '  <description>Generated ' + nowISO() + '</description>', '  <Style id="wp"><IconStyle><scale>0.8</scale></IconStyle></Style>', '  <Style id="path"><LineStyle><color>ffba7c1a</color><width>2</width></LineStyle></Style>'];
   wps.forEach(function (wp, i) {
-    var p = (wp.actions && wp.actions[0] && wp.actions[0].parameters && wp.actions[0].parameters.rotateGimbal) ? wp.actions[0].parameters.rotateGimbal.pitch : '';
+    var p = (wp.actions && wp.actions[0] && wp.actions[0].parameters && wp.actions[0].parameters.gimbalRotate) ? wp.actions[0].parameters.gimbalRotate.pitch : '';
     lines.push('  <Placemark><styleUrl>#wp</styleUrl>', '    <name>WP' + (i + 1) + ' ' + wp.waypointType + '</name>', '    <description>alt:' + wp.location.alt + 'm pitch:' + p + ' spd:' + wp.speed + '</description>', '    <Point><altitudeMode>relativeToGround</altitudeMode>', '      <coordinates>' + wp.location.lon + ',' + wp.location.lat + ',' + wp.location.alt + '</coordinates>', '    </Point></Placemark>');
   });
   lines.push('  <Placemark><styleUrl>#path</styleUrl><name>Flight path</name>', '    <LineString><altitudeMode>relativeToGround</altitudeMode>', '      <coordinates>' + wps.map(function (w) { return w.location.lon + ',' + w.location.lat + ',' + w.location.alt; }).join(' ') + '</coordinates>', '    </LineString></Placemark>', '</Document></kml>');
@@ -771,7 +757,7 @@ function toKML(wps, ctx) {
 function toCSV(wps) {
   var rows = ['index,type,latitude,longitude,altitude_m,pitch_deg,heading_deg,heading_mode,speed_mps,trigger'];
   wps.forEach(function (wp, i) {
-    var pitch = (wp.actions || []).reduce(function (acc, a) { return (a.parameters && a.parameters.rotateGimbal) ? a.parameters.rotateGimbal.pitch : acc; }, '');
+    var pitch = (wp.actions || []).reduce(function (acc, a) { return (a.parameters && a.parameters.gimbalRotate) ? a.parameters.gimbalRotate.pitch : acc; }, '');
     var trig = (wp.actions || []).some(function (a) { return a.type === 'takePhoto'; }) ? 'photo' : 'none';
     // heading lives on the waypoint for most types; for transect it's only in the rotateYaw action
     var hdg = wp.heading != null ? wp.heading : (wp.actions || []).reduce(function (acc, a) { return (a.parameters && a.parameters.rotateYaw) ? a.parameters.rotateYaw.aircraftHeading : acc; }, '');
