@@ -142,8 +142,6 @@ function photoStep(ctx, ownSpacing) {
   if (ctx.trigger === 'distance') return Math.max(0.5, +ctx.photoDistance || 10);
   return ownSpacing > 0 ? ownSpacing : 0;
 }
-function wpTakeoff(lat, lon, alt, spd) { return { location: loc(lat, lon, alt), waypointType: 'takeOff', headingMode: 'followWayline', speed: spd }; }
-function wpLanding(lat, lon, alt, spd) { return { location: loc(lat, lon, alt), waypointType: 'landing', headingMode: 'followWayline', speed: spd }; }
 function wpPhoto(lat, lon, alt, spd, heading, pitch, ctx, extraActions) {
   var hdg = r2(((heading % 360) + 360) % 360);
   var acts = [rotateYaw(hdg)];
@@ -217,14 +215,13 @@ reg({
     var heading = (c.heading != null && isFinite(c.heading)) ? c.heading : hd.heading;
     var legs = this.zigzag(c.minAlt, c.maxAlt, c.upStep);
     var coords = { A: c.A, B: c.B }, sideMap = c.startSide === 'A' ? { A: 'A', B: 'B' } : { A: 'B', B: 'A' };
-    var start = coords[c.startSide], out = [wpTakeoff(start.lat, start.lon, c.ground + c.takeoffAlt, c.speed)];
+    var out = [];
     var first = coords[sideMap[legs[0].side]];
     var fw = wpPhoto(first.lat, first.lon, c.ground + legs[0].alt, c.speed, heading, null, c);
     out.push(fw);
     for (var i = 1; i < legs.length; i++) { var p = coords[sideMap[legs[i].side]]; out.push(wpPhoto(p.lat, p.lon, c.ground + legs[i].alt, c.speed, heading, null, c)); }
     var last = coords[sideMap[legs[legs.length - 1].side]];
     if (Math.abs(legs[legs.length - 1].alt - c.minAlt) > 1e-9) out.push(wpPhoto(last.lat, last.lon, c.ground + c.minAlt, c.speed, heading, null, c));
-    out.push(wpLanding(start.lat, start.lon, c.ground + c.takeoffAlt, c.speed));
     return out;
   },
   drawMap: function (c, H) {
@@ -287,8 +284,6 @@ reg({
   buildWaypoints: function (c) {
     if (!c.rings || !c.rings.length) return [];
     var self = this, gR = c.globalRadius, out = [];
-    var first = this.ringPts(c, (c.rings[0].radius != null ? c.rings[0].radius : gR), 0)[0];
-    out.push(wpTakeoff(first.lat, first.lon, c.ground + c.takeoffAlt, c.speed));
     c.rings.forEach(function (ring, ri) {
       var radius = ring.radius != null ? ring.radius : gR;
       self.ringPts(c, radius, ri).forEach(function (pt) {
@@ -304,7 +299,6 @@ reg({
       });
     });
     if (c.nadir) { var acts = [gimbal(-90)]; if (trigShot(c)) acts.push(photo()); acts.forEach(function (a, i) { a.order = i; }); out.push({ location: loc(c.center.lat, c.center.lon, c.ground + c.nadirAlt), waypointType: 'waypoint', headingMode: 'fixed', speed: c.speed, actions: acts }); }
-    out.push(wpLanding(first.lat, first.lon, c.ground + c.takeoffAlt, c.speed));
     return out;
   },
   drawMap: function (c, H) {
@@ -363,12 +357,11 @@ reg({
   },
   buildWaypoints: function (c) {
     var pts = this.pathPts(c); if (!pts.length) return [];
-    var out = [wpTakeoff(pts[0].lat, pts[0].lon, c.ground + c.takeoffAlt, c.speed)];
+    var out = [];
     pts.forEach(function (p) {
       var acts = [gimbal(p.pitch)]; if (trigShot(c)) acts.push(photo());
       out.push({ location: loc(p.lat, p.lon, c.ground + p.alt), waypointType: 'waypoint', headingMode: 'towardPOI', speed: c.speed, poiCoordinate: { lat: r7(c.center.lat), lon: r7(c.center.lon) }, actions: acts });
     });
-    out.push(wpLanding(pts[0].lat, pts[0].lon, c.ground + c.takeoffAlt, c.speed));
     return out;
   },
   drawMap: function (c, H) {
@@ -415,13 +408,12 @@ reg({
     var g = this.geom(c); if (g.len < 0.5 || c.wallHeight <= 0) return [];
     var vStep = c.vStep > 0 ? c.vStep : photoSpacingFor(c.standoff);
     var hStep = photoStep(c, c.hStep > 0 ? c.hStep : laneSpacingFor(c.standoff)) || laneSpacingFor(c.standoff);
-    var out = [wpTakeoff(g.A2.lat, g.A2.lon, c.ground + c.takeoffAlt, c.speed)], flip = false;
+    var out = [], flip = false;
     for (var alt = c.bottomAlt + vStep / 2; alt <= c.bottomAlt + c.wallHeight + 1e-9; alt += vStep) {
       var row = densify(g.A2, g.B2, hStep); if (flip) row = row.slice().reverse();
       row.forEach(function (p) { out.push(wpPhoto(p.lat, p.lon, c.ground + alt, c.speed, g.look, c.pitch, c)); });
       flip = !flip;
     }
-    out.push(wpLanding(g.A2.lat, g.A2.lon, c.ground + c.takeoffAlt, c.speed));
     return out;
   },
   drawMap: function (c, H) {
@@ -445,17 +437,15 @@ function buildGridWps(c, axes, pitch) {
   var allLanes = [];
   axes.forEach(function (ax) { allLanes = allLanes.concat(laneEndpoints(c.vertices, (axisAuto + ax) % 360, spacing)); });
   if (!allLanes.length) return [];
-  var out = [], started = false, first = null, total = 0;
+  var out = [], total = 0;
   allLanes.forEach(function (lane) {
     var hd = bearing(lane[0].lat, lane[0].lon, lane[1].lat, lane[1].lon);
     var pts = ps > 0 ? densify(lane[0], lane[1], ps) : lane;
     pts.forEach(function (p) {
       if (total++ > 4000) return;
-      if (!started) { first = p; out.push(wpTakeoff(p.lat, p.lon, c.ground + c.takeoffAlt, c.speed)); started = true; }
       out.push(wpPhoto(p.lat, p.lon, c.ground + alt, c.speed, hd, pitch != null ? pitch : c.pitch, c));
     });
   });
-  if (first) out.push(wpLanding(first.lat, first.lon, c.ground + c.takeoffAlt, c.speed));
   return out;
 }
 function drawGridLanes(c, H, axes) {
@@ -531,7 +521,7 @@ reg({
   },
   buildWaypoints: function (c) {
     if (!c.vertices || c.vertices.length < 2) return [];
-    var lanes = this.lanes(c), out = [], started = false, first = null, total = 0, ps = photoStep(c, c.photoSpacing || 0);
+    var lanes = this.lanes(c), out = [], total = 0, ps = photoStep(c, c.photoSpacing || 0);
     lanes.forEach(function (lane, li) {
       var path = li % 2 ? lane.path.slice().reverse() : lane.path;
       for (var s = 0; s < path.length - 1; s++) {
@@ -540,12 +530,10 @@ reg({
         seg.forEach(function (p, idx) {
           if (s > 0 && idx === 0) return; // avoid duplicate vertex
           if (total++ > 4000) return;
-          if (!started) { first = p; out.push(wpTakeoff(p.lat, p.lon, c.ground + c.takeoffAlt, c.speed)); started = true; }
           out.push(wpPhoto(p.lat, p.lon, c.ground + c.alt, c.speed, hd, c.pitch, c));
         });
       }
     });
-    if (first) out.push(wpLanding(first.lat, first.lon, c.ground + c.takeoffAlt, c.speed));
     return out;
   },
   drawMap: function (c, H) {
@@ -576,18 +564,16 @@ reg({
   },
   buildWaypoints: function (c) {
     if (!c.vertices || c.vertices.length < 3) return [];
-    var L = this.loop(c), vs = L.vs.concat([L.vs[0]]), out = [], started = false, first = null, ps = photoStep(c, c.pointSpacing || 0), total = 0;
+    var L = this.loop(c), vs = L.vs.concat([L.vs[0]]), out = [], ps = photoStep(c, c.pointSpacing || 0), total = 0;
     for (var s = 0; s < vs.length - 1; s++) {
       var seg = ps > 0 ? densify(vs[s], vs[s + 1], ps) : [vs[s], vs[s + 1]];
       for (var idx = 0; idx < seg.length; idx++) {
         if (s > 0 && idx === 0) continue;
         var p = seg[idx]; if (total++ > 4000) break;
         var hd = c.faceCenter ? bearing(p.lat, p.lon, L.ctr.lat, L.ctr.lon) : bearing(vs[s].lat, vs[s].lon, vs[s + 1].lat, vs[s + 1].lon);
-        if (!started) { first = p; out.push(wpTakeoff(p.lat, p.lon, c.ground + c.takeoffAlt, c.speed)); started = true; }
         out.push(wpPhoto(p.lat, p.lon, c.ground + c.alt, c.speed, hd, c.pitch, c));
       }
     }
-    if (first) out.push(wpLanding(first.lat, first.lon, c.ground + c.takeoffAlt, c.speed));
     return out;
   },
   drawMap: function (c, H) {
@@ -606,7 +592,7 @@ var state = {
   version: 1, activeMissionType: 'transect', outFmt: 'airhub',
   shared: {
     metadata: { operator: '', site: '', date: nowISO().slice(0, 10), notes: '' },
-    flight: { speed: 2.0, ground: 0, takeoffAlt: 10 },
+    flight: { speed: 2.0, ground: 0 },
     camera: { preset: 'custom', trigger: 'waypoint', photoDistance: 10, frontOverlap: 80, sideOverlap: 70 },
     safety: { minAlt: 1, maxAlt: 400, maxSpeed: 15, geofence: false, geofenceRadius: 80 }
   },
@@ -624,7 +610,7 @@ function activeMission() { return MISSIONS[state.activeMissionType]; }
 function resolveContext(m) {
   ensureDefaults(m.id);
   var s = state.shared, ctx = {
-    speed: s.flight.speed, ground: s.flight.ground, takeoffAlt: s.flight.takeoffAlt != null ? s.flight.takeoffAlt : 10,
+    speed: s.flight.speed, ground: s.flight.ground,
     trigger: s.camera.trigger, photoDistance: s.camera.photoDistance, frontOverlap: s.camera.frontOverlap, sideOverlap: s.camera.sideOverlap,
     camera: s.camera, safety: s.safety, metadata: s.metadata,
     vertices: state.geometry.vertices
@@ -972,7 +958,7 @@ var PRESETS = {
 
 /* ── shared inputs <-> state ───────────────────────────────────────────────*/
 var SHARED_INPUTS = [
-  ['speed', 'flight', 'speed', 'num'], ['ground', 'flight', 'ground', 'num'], ['takeoffAlt', 'flight', 'takeoffAlt', 'num'],
+  ['speed', 'flight', 'speed', 'num'], ['ground', 'flight', 'ground', 'num'],
   ['cameraPreset', 'camera', 'preset', 'str'], ['photoDistance', 'camera', 'photoDistance', 'num'],
   ['frontOverlap', 'camera', 'frontOverlap', 'num'], ['sideOverlap', 'camera', 'sideOverlap', 'num'],
   ['minAltSafe', 'safety', 'minAlt', 'num'], ['maxAltSafe', 'safety', 'maxAlt', 'num'], ['maxSpeed', 'safety', 'maxSpeed', 'num'],
