@@ -44,9 +44,6 @@ function destination(lat, lon, brngDeg, distM) {
   var lo2 = lo1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(la1), Math.cos(d) - Math.sin(la1) * Math.sin(la2));
   return { lat: la2 * R2D, lon: lo2 * R2D };
 }
-// local east/north plane around an origin (equirectangular; fine for site scale)
-function project(pt, o) { return { e: (pt.lon - o.lon) * mpdLon(o.lat), n: (pt.lat - o.lat) * MPD_LAT }; }
-function unproject(p, o) { return { lat: o.lat + p.n / MPD_LAT, lon: o.lon + p.e / mpdLon(o.lat) }; }
 function centroid(verts) {
   var la = 0, lo = 0; verts.forEach(function (v) { la += v.lat; lo += v.lon; });
   return { lat: la / verts.length, lon: lo / verts.length };
@@ -54,15 +51,6 @@ function centroid(verts) {
 function avgAngle(a, b) {
   var x = Math.cos(a * D2R) + Math.cos(b * D2R), y = Math.sin(a * D2R) + Math.sin(b * D2R);
   return (Math.atan2(y, x) * R2D + 360) % 360;
-}
-function longestEdgeBearing(verts) {
-  var best = 0, bb = 0;
-  for (var i = 0; i < verts.length; i++) {
-    var a = verts[i], b = verts[(i + 1) % verts.length];
-    var d = dist(a.lat, a.lon, b.lat, b.lon);
-    if (d > best) { best = d; bb = bearing(a.lat, a.lon, b.lat, b.lon); }
-  }
-  return bb;
 }
 function estimateMission(wps, spd) {
   var d = 0;
@@ -73,36 +61,6 @@ function estimateMission(wps, spd) {
   }
   return { dist: Math.round(d), dur: spd > 0 ? Math.round(d / spd) : 0 };
 }
-// parallel-lane generation inside a polygon, lanes along axis bearing, spaced `spacing` m.
-// returns array of lanes, each [{lat,lon},{lat,lon}] (in serpentine order).
-function laneEndpoints(verts, axisDeg, spacing) {
-  if (verts.length < 3 || spacing <= 0) return [];
-  var o = centroid(verts);
-  var th = axisDeg * D2R, s = Math.sin(th), c = Math.cos(th);
-  var uv = verts.map(function (vtx) { var p = project(vtx, o); return { u: p.e * s + p.n * c, v: p.e * c - p.n * s }; });
-  var vmin = Infinity, vmax = -Infinity;
-  uv.forEach(function (p) { vmin = Math.min(vmin, p.v); vmax = Math.max(vmax, p.v); });
-  var lanes = [], flip = false;
-  for (var vv = vmin + spacing / 2; vv < vmax; vv += spacing) {
-    var xs = [];
-    for (var i = 0; i < uv.length; i++) {
-      var p1 = uv[i], p2 = uv[(i + 1) % uv.length];
-      if ((p1.v <= vv && p2.v > vv) || (p2.v <= vv && p1.v > vv)) {
-        var t = (vv - p1.v) / (p2.v - p1.v);
-        xs.push(p1.u + t * (p2.u - p1.u));
-      }
-    }
-    xs.sort(function (a, b) { return a - b; });
-    for (var k = 0; k + 1 < xs.length; k += 2) {
-      var a = { u: xs[k], v: vv }, b = { u: xs[k + 1], v: vv };
-      var pa = unproject({ e: a.u * s + a.v * c, n: a.u * c - a.v * s }, o);
-      var pb = unproject({ e: b.u * s + b.v * c, n: b.u * c - b.v * s }, o);
-      lanes.push(flip ? [pb, pa] : [pa, pb]);
-    }
-    flip = !flip;
-  }
-  return lanes;
-}
 // densify a polyline into points no more than `step` apart (keeps endpoints)
 function densify(a, b, step) {
   var L = dist(a.lat, a.lon, b.lat, b.lon);
@@ -112,13 +70,14 @@ function densify(a, b, step) {
   return out;
 }
 
-/* ── camera presets (FOV degrees) ───────────────────────────────────────── */
-var CAMERAS = {
-  x7_24: { h: 52.0, v: 36.0 }, x7_35: { h: 37.5, v: 25.4 },
-  p1_35: { h: 54.4, v: 37.8 }, p1_50: { h: 39.6, v: 27.0 },
-  m3e: { h: 71.0, v: 56.0 }
+/* ── lens types (FOV degrees) ────────────────────────────────────────────── */
+var LENSES = {
+  wide:       { h: 72.0, v: 56.0 },
+  narrowband: { h: 40.0, v: 30.0 },
+  infrared:   { h: 45.0, v: 35.0 },
+  zoom:       { h: 30.0, v: 22.0 }
 };
-function camFOV() { return CAMERAS[state.shared.camera.preset] || null; }
+function camFOV() { return LENSES[state.shared.camera.lens] || null; }
 function laneSpacingFor(alt) {
   var ov = clamp(state.shared.camera.sideOverlap / 100, 0, 0.95), c = camFOV();
   if (c) return Math.max(0.5, 2 * alt * Math.tan(c.h * D2R / 2) * (1 - ov));
@@ -167,11 +126,10 @@ function autoHeadingDetails(A, B, POI) {
 
 /* ── mission registry ───────────────────────────────────────────────────── */
 var MISSIONS = {};
-var ORDER = ['transect', 'orbit', 'spiral', 'facade', 'grid', 'doubleGrid', 'corridor', 'perimeter'];
+var ORDER = ['transect', 'orbit', 'spiral', 'facade', 'corridor', 'perimeter'];
 var CATS = [
   { name: 'Line', ids: ['transect', 'corridor', 'perimeter', 'facade'] },
-  { name: 'Inspection', ids: ['orbit', 'spiral'] },
-  { name: 'Mapping', ids: ['grid', 'doubleGrid'] }
+  { name: 'Inspection', ids: ['orbit', 'spiral'] }
 ];
 function reg(m) { MISSIONS[m.id] = m; }
 var RING_COLORS = ['#4eadea', '#4ade80', '#fb923c', '#f87171', '#a78bfa', '#34d399', '#60a5fa', '#f472b6'];
@@ -428,71 +386,6 @@ reg({
   validate: function (c) { var e = []; if (dist(c.A.lat, c.A.lon, c.B.lat, c.B.lon) < 0.5) e.push('Wall endpoints A and B coincide'); if (c.wallHeight <= 0) e.push('Wall height must be > 0'); return { errs: e, warns: [] }; }
 });
 
-/* ===================== MAPPING: GRID (shared lane builder) ================ */
-function buildGridWps(c, axes, pitch) {
-  if (!c.vertices || c.vertices.length < 3) return [];
-  var alt = c.alt, spacing = c.laneSpacing > 0 ? c.laneSpacing : laneSpacingFor(alt);
-  var ps = photoStep(c, c.photoSpacing != null ? c.photoSpacing : 0);
-  var axisAuto = (c.laneAngle != null && isFinite(c.laneAngle)) ? c.laneAngle : longestEdgeBearing(c.vertices);
-  var allLanes = [];
-  axes.forEach(function (ax) { allLanes = allLanes.concat(laneEndpoints(c.vertices, (axisAuto + ax) % 360, spacing)); });
-  if (!allLanes.length) return [];
-  var out = [], total = 0;
-  allLanes.forEach(function (lane) {
-    var hd = bearing(lane[0].lat, lane[0].lon, lane[1].lat, lane[1].lon);
-    var pts = ps > 0 ? densify(lane[0], lane[1], ps) : lane;
-    pts.forEach(function (p) {
-      if (total++ > 4000) return;
-      out.push(wpPhoto(p.lat, p.lon, c.ground + alt, c.speed, hd, pitch != null ? pitch : c.pitch, c));
-    });
-  });
-  return out;
-}
-function drawGridLanes(c, H, axes) {
-  if (!c.vertices || c.vertices.length < 3) return;
-  var spacing = c.laneSpacing > 0 ? c.laneSpacing : laneSpacingFor(c.alt);
-  var axisAuto = (c.laneAngle != null && isFinite(c.laneAngle)) ? c.laneAngle : longestEdgeBearing(c.vertices);
-  axes.forEach(function (ax, idx) {
-    laneEndpoints(c.vertices, (axisAuto + ax) % 360, spacing).forEach(function (lane) {
-      H.line([[lane[0].lat, lane[0].lon], [lane[1].lat, lane[1].lon]], { color: idx === 0 ? '#4eadea' : '#4ade80', weight: 1.5, opacity: 0.85 });
-    });
-  });
-}
-reg({
-  id: 'grid', label: 'Grid survey', cat: 'Mapping', icon: 'grid-3x3',
-  desc: 'Flies parallel lawnmower lanes over a polygon area with the camera pointing straight down, lane spacing derived from sensor footprint and overlap. The standard mapping pattern — orthomosaics, elevation models, and area surveys.',
-  geometry: 'POLYGON', hasProfile: false,
-  defaults: { alt: 40, laneSpacing: 0, photoSpacing: 0, laneAngle: null, pitch: -90 },
-  fields: [
-    { key: 'alt', label: 'Altitude AGL', unit: 'm', type: 'number', step: 5, min: 1 },
-    { key: 'laneSpacing', label: 'Lane spacing (0=auto)', unit: 'm', type: 'number', step: 1, min: 0 },
-    { key: 'photoSpacing', label: 'Photo spacing (0=ends)', unit: 'm', type: 'number', step: 1, min: 0 },
-    { key: 'laneAngle', label: 'Lane angle (blank=auto)', unit: '°', type: 'number', step: 5 },
-    { key: 'pitch', label: 'Gimbal pitch', unit: '°', type: 'number', step: 5, min: -90, max: 0 }
-  ],
-  buildWaypoints: function (c) { return buildGridWps(c, [0], c.pitch); },
-  drawMap: function (c, H) { drawGridLanes(c, H, [0]); },
-  summary: function (c) { return (c.vertices ? c.vertices.length : 0) + '-pt area · ' + (c.laneSpacing > 0 ? c.laneSpacing : r1(laneSpacingFor(c.alt))) + ' m lanes'; },
-  validate: function (c) { var e = []; if (!c.vertices || c.vertices.length < 3) e.push('Define an area — click ≥ 3 points on the map'); return { errs: e, warns: [] }; }
-});
-reg({
-  id: 'doubleGrid', label: 'Double grid', cat: 'Mapping', icon: 'layout-grid',
-  desc: 'Flies the grid pattern twice at perpendicular axes (a crosshatch), usually with an oblique gimbal angle. Use it for richer 3D reconstruction of buildings and complex terrain by capturing every feature from two directions.',
-  geometry: 'POLYGON', hasProfile: false,
-  defaults: { alt: 40, laneSpacing: 0, photoSpacing: 0, laneAngle: null, pitch: -60 },
-  fields: [
-    { key: 'alt', label: 'Altitude AGL', unit: 'm', type: 'number', step: 5, min: 1 },
-    { key: 'laneSpacing', label: 'Lane spacing (0=auto)', unit: 'm', type: 'number', step: 1, min: 0 },
-    { key: 'photoSpacing', label: 'Photo spacing (0=ends)', unit: 'm', type: 'number', step: 1, min: 0 },
-    { key: 'laneAngle', label: 'Lane angle (blank=auto)', unit: '°', type: 'number', step: 5 },
-    { key: 'pitch', label: 'Gimbal pitch (oblique)', unit: '°', type: 'number', step: 5, min: -90, max: 0 }
-  ],
-  buildWaypoints: function (c) { return buildGridWps(c, [0, 90], c.pitch); },
-  drawMap: function (c, H) { drawGridLanes(c, H, [0, 90]); },
-  summary: function (c) { return (c.vertices ? c.vertices.length : 0) + '-pt area · crosshatch'; },
-  validate: function (c) { var e = []; if (!c.vertices || c.vertices.length < 3) e.push('Define an area — click ≥ 3 points on the map'); return { errs: e, warns: [] }; }
-});
-
 /* ============================== MISSION: CORRIDOR ========================= */
 reg({
   id: 'corridor', label: 'Corridor', cat: 'Line', icon: 'route',
@@ -591,10 +484,9 @@ reg({
 var state = {
   version: 1, activeMissionType: 'transect', outFmt: 'airhub',
   shared: {
-    metadata: { operator: '', site: '', date: nowISO().slice(0, 10), notes: '' },
     flight: { speed: 2.0, ground: 0 },
-    camera: { preset: 'custom', trigger: 'waypoint', photoDistance: 10, frontOverlap: 80, sideOverlap: 70 },
-    safety: { minAlt: 1, maxAlt: 400, maxSpeed: 15, geofence: false, geofenceRadius: 80 }
+    camera: { lens: 'wide', trigger: 'waypoint', photoDistance: 10, frontOverlap: 80, sideOverlap: 70 },
+    home: null
   },
   params: {},
   geometry: { vertices: [
@@ -612,7 +504,7 @@ function resolveContext(m) {
   var s = state.shared, ctx = {
     speed: s.flight.speed, ground: s.flight.ground,
     trigger: s.camera.trigger, photoDistance: s.camera.photoDistance, frontOverlap: s.camera.frontOverlap, sideOverlap: s.camera.sideOverlap,
-    camera: s.camera, safety: s.safety, metadata: s.metadata,
+    camera: s.camera,
     vertices: state.geometry.vertices
   };
   var p = state.params[m.id]; for (var k in p) ctx[k] = p[k];
@@ -628,7 +520,8 @@ function centerOf(m, c) {
 /* ── leaflet map controller ────────────────────────────────────────────────*/
 var mapCtrl = (function () {
   var map, editLayer, overlayLayer, mode = 'POINTS', lastFitSig = '';
-  function dotIcon(color, sz) { sz = sz || 15; return L.divIcon({ className: '', html: '<div style="width:' + sz + 'px;height:' + sz + 'px;border-radius:50%;background:' + color + ';border:2px solid #fff;box-shadow:0 0 0 3px rgba(78,173,234,0.3)"></div>', iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] }); }
+  function dotIcon(color, sz) { sz = sz || 15; return L.divIcon({ className: '', html: '<div style="width:' + sz + 'px;height:' + sz + 'px;border-radius:50%;background:' + color + ';border:2px solid #fff;box-shadow:0 0 0 3px rgba(78,173,234,0.3);cursor:grab"></div>', iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] }); }
+  function homeIcon() { return L.divIcon({ className: '', html: '<div style="width:20px;height:20px;border-radius:4px;background:#fb923c;border:2px solid #fff;box-shadow:0 0 0 3px rgba(251,146,60,0.3);display:flex;align-items:center;justify-content:center;cursor:grab;font-size:11px;line-height:1;color:#fff;font-weight:700">H</div>', iconSize: [20, 20], iconAnchor: [10, 10] }); }
   function cssColor(v) { if (v && v.indexOf('var(') === 0) { var name = v.slice(4, -1).trim(); return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#4eadea'; } return v; }
   function init() {
     map = L.map('map', { zoomControl: true, attributionControl: true });
@@ -688,19 +581,22 @@ var mapCtrl = (function () {
     // faint full route
     if (wps && wps.length > 1) L.polyline(wps.map(function (w) { return [w.location.lat, w.location.lon]; }), { color: '#1a7cba', weight: 1, opacity: 0.45 }).addTo(overlayLayer);
     renderEditHandles(m, ctx);
-    // geofence ring
-    if (ctx.safety.geofence) { var ctr = centerOf(m, ctx); if (ctr) L.circle([ctr.lat, ctr.lon], { radius: ctx.safety.geofenceRadius, color: '#fb923c', weight: 1, dashArray: '6 3', fill: false }).addTo(overlayLayer); }
-    // fit only when geometry footprint changes
-    var sig = JSON.stringify(m.geometry === 'POINTS' ? m.points.map(function (p) { return ctx[p.key]; }) : state.geometry.vertices) + m.id;
-    if (sig !== lastFitSig) {
-      lastFitSig = sig;
-      var pts = H._arr.concat(m.geometry === 'POINTS' ? m.points.map(function (p) { return ctx[p.key] ? [ctx[p.key].lat, ctx[p.key].lon] : null; }).filter(Boolean) : state.geometry.vertices.map(function (v) { return [v.lat, v.lon]; }));
-      if (pts.length) { try { map.fitBounds(L.latLngBounds(pts).pad(0.4)); } catch (e) {} }
+    // home / takeoff-landing marker
+    var missionWps = (m.buildWaypoints ? (function () { try { return m.buildWaypoints(ctx) || []; } catch (e) { return []; } })() : []);
+    if (state.shared.home === null && missionWps.length > 0) {
+      state.shared.home = destination(missionWps[0].location.lat, missionWps[0].location.lon, 270, 20);
+    }
+    if (state.shared.home) {
+      var h = state.shared.home;
+      var hm = L.marker([h.lat, h.lon], { icon: homeIcon(), draggable: true, keyboard: false }).addTo(editLayer);
+      hm.bindTooltip('Home', { permanent: true, direction: 'top', offset: [0, -10] });
+      hm.on('dragend', function (ev) { var p = ev.target.getLatLng(); state.shared.home = { lat: +p.lat.toFixed(7), lon: +p.lng.toFixed(7) }; render(); });
     }
   }
   function invalidate() { if (map) setTimeout(function () { map.invalidateSize(); }, 60); }
   function resetFit() { lastFitSig = ''; }
-  return { init: init, draw: draw, invalidate: invalidate, resetFit: resetFit };
+  function getCenter() { return map ? map.getCenter() : { lat: DEMO.lat, lng: DEMO.lon }; }
+  return { init: init, draw: draw, invalidate: invalidate, resetFit: resetFit, getCenter: getCenter };
 })();
 
 /* ── side profile (altitude AGL vs cumulative distance) ─────────────────────*/
@@ -743,9 +639,9 @@ function showTopDownNote(m) {
 }
 
 /* ── export (AirHub / KML / CSV) ───────────────────────────────────────────*/
-function toAirHub(wps) { return JSON.stringify(wps, null, 2); }
+function toAirHub(wps) { return JSON.stringify({ lens: state.shared.camera.lens, waypoints: wps }, null, 2); }
 function toKML(wps, ctx) {
-  var site = ctx.metadata.site || 'AirHub Mission';
+  var site = 'AirHub Mission';
   var lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>', '  <name>' + site + '</name>', '  <description>Generated ' + nowISO() + '</description>', '  <Style id="wp"><IconStyle><scale>0.8</scale></IconStyle></Style>', '  <Style id="path"><LineStyle><color>ffba7c1a</color><width>2</width></LineStyle></Style>'];
   wps.forEach(function (wp, i) {
     var p = (wp.actions && wp.actions[0] && wp.actions[0].parameters && wp.actions[0].parameters.gimbalRotate) ? wp.actions[0].parameters.gimbalRotate.pitch : '';
@@ -766,9 +662,15 @@ function toCSV(wps) {
   return rows.join('\n');
 }
 function buildOutput(wps, ctx) {
-  if (state.outFmt === 'kml') return { content: toKML(wps, ctx), ext: 'kml', mime: 'application/vnd.google-earth.kml+xml', name: 'mission.kml' };
-  if (state.outFmt === 'csv') return { content: toCSV(wps), ext: 'csv', mime: 'text/csv', name: 'mission.csv' };
-  return { content: toAirHub(wps), ext: 'json', mime: 'application/json', name: 'mission.json' };
+  var all = wps;
+  if (state.shared.home && wps.length > 0) {
+    var h = state.shared.home;
+    var homeWp = { location: loc(h.lat, h.lon, ctx.ground), waypointType: 'waypoint', headingMode: 'followWayline', speed: ctx.speed, actions: [] };
+    all = [homeWp].concat(wps).concat([clone(homeWp)]);
+  }
+  if (state.outFmt === 'kml') return { content: toKML(all, ctx), ext: 'kml', mime: 'application/vnd.google-earth.kml+xml', name: 'mission.kml' };
+  if (state.outFmt === 'csv') return { content: toCSV(all), ext: 'csv', mime: 'text/csv', name: 'mission.csv' };
+  return { content: toAirHub(all), ext: 'json', mime: 'application/json', name: 'mission.json' };
 }
 function dlBlob(content, mime, filename) {
   var blob = new Blob([content], { type: mime }), url = URL.createObjectURL(blob), a = document.createElement('a');
@@ -787,19 +689,9 @@ function updateStats(wps, ctx) {
   var maxAgl = Math.max.apply(null, wps.map(function (w) { return w.location.alt - ctx.ground; }));
   $('s-maxalt').innerHTML = r1(maxAgl) + '<span class="stat-unit">m</span>';
 }
-function sharedValidate(ctx, wps, m) {
-  var e = [], w = [], s = ctx.safety;
-  if (ctx.speed > s.maxSpeed) e.push('Speed ' + ctx.speed + ' m/s exceeds max ' + s.maxSpeed + ' m/s');
+function sharedValidate(ctx, wps) {
+  var e = [], w = [];
   if (ctx.speed < 0.5) e.push('Speed too low (min 0.5 m/s)');
-  var below = 0, above = 0;
-  wps.forEach(function (wp) { var agl = wp.location.alt - ctx.ground; if (agl < s.minAlt - 1e-6 && wp.waypointType === 'waypoint') below++; if (agl > s.maxAlt + 1e-6) above++; });
-  if (below) e.push(below + ' waypoint(s) below min altitude ' + s.minAlt + ' m');
-  if (above) e.push(above + ' waypoint(s) exceed max altitude ' + s.maxAlt + ' m');
-  if (s.geofence) {
-    var ctr = centerOf(m, ctx), out = 0;
-    if (ctr) wps.forEach(function (wp) { if (dist(ctr.lat, ctr.lon, wp.location.lat, wp.location.lon) > s.geofenceRadius + 1e-6) out++; });
-    if (out) e.push(out + ' waypoint(s) outside geofence radius ' + s.geofenceRadius + ' m');
-  }
   if (wps.length > 2000) w.push(wps.length + ' waypoints — large mission, controllers may truncate');
   return { errs: e, warns: w };
 }
@@ -952,25 +844,19 @@ var PRESETS = {
     'Cliff face': { minAlt: 10, maxAlt: 80, upStep: 10, startSide: 'A', heading: null },
     Bridge: { minAlt: 5, maxAlt: 30, upStep: 5, startSide: 'A', heading: null }
   },
-  grid: { Detailed: { alt: 30, laneSpacing: 0, photoSpacing: 0, laneAngle: null, pitch: -90 }, Overview: { alt: 80, laneSpacing: 0, photoSpacing: 0, laneAngle: null, pitch: -90 } },
   spiral: { Chimney: { turns: 6, ptsPerTurn: 16, altStart: 5, altEnd: 60, radiusStart: 12, radiusEnd: 12, startAngle: 0, orbitDir: 'CW', pitchStart: -10, pitchEnd: -50 }, Cone: { turns: 4, ptsPerTurn: 14, altStart: 5, altEnd: 40, radiusStart: 18, radiusEnd: 6, startAngle: 0, orbitDir: 'CW', pitchStart: -15, pitchEnd: -65 } }
 };
 
 /* ── shared inputs <-> state ───────────────────────────────────────────────*/
 var SHARED_INPUTS = [
   ['speed', 'flight', 'speed', 'num'], ['ground', 'flight', 'ground', 'num'],
-  ['cameraPreset', 'camera', 'preset', 'str'], ['photoDistance', 'camera', 'photoDistance', 'num'],
-  ['frontOverlap', 'camera', 'frontOverlap', 'num'], ['sideOverlap', 'camera', 'sideOverlap', 'num'],
-  ['minAltSafe', 'safety', 'minAlt', 'num'], ['maxAltSafe', 'safety', 'maxAlt', 'num'], ['maxSpeed', 'safety', 'maxSpeed', 'num'],
-  ['geofenceRadius', 'safety', 'geofenceRadius', 'num'],
-  ['metaOperator', 'metadata', 'operator', 'str'], ['metaSite', 'metadata', 'site', 'str'], ['metaNotes', 'metadata', 'notes', 'str'], ['metaDate', 'metadata', 'date', 'str']
+  ['cameraLens', 'camera', 'lens', 'str'], ['photoDistance', 'camera', 'photoDistance', 'num'],
+  ['frontOverlap', 'camera', 'frontOverlap', 'num'], ['sideOverlap', 'camera', 'sideOverlap', 'num']
 ];
 function syncSharedInputs() {
   SHARED_INPUTS.forEach(function (s) { var v = state.shared[s[1]][s[2]]; $(s[0]).value = (v == null ? '' : v); });
   $('trigSeg').querySelectorAll('.seg-btn').forEach(function (b) { b.classList.toggle('on', b.dataset.trig === state.shared.camera.trigger); });
   $('distanceField').style.display = state.shared.camera.trigger === 'distance' ? '' : 'none';
-  $('togGeofence').classList.toggle('on', state.shared.safety.geofence);
-  $('geofenceField').style.display = state.shared.safety.geofence ? '' : 'none';
   $('fmtTabs').querySelectorAll('.fmt-tab').forEach(function (b) { b.classList.toggle('on', b.dataset.fmt === state.outFmt); });
 }
 
@@ -982,7 +868,7 @@ function render() {
   state.lastWps = wps;
   mapCtrl.draw(m, ctx, wps);
   if (m.hasProfile) { $('profilePane').style.display = ''; drawProfile(ctx, wps, m); } else { showTopDownNote(m); }
-  var tv = m.validate ? m.validate(ctx) : { errs: [], warns: [] }, sv = sharedValidate(ctx, wps, m);
+  var tv = m.validate ? m.validate(ctx) : { errs: [], warns: [] }, sv = sharedValidate(ctx, wps);
   var errs = tv.errs.concat(sv.errs), warns = tv.warns.concat(sv.warns);
   renderErrors(errs, warns); updateStats(wps, ctx);
   var out = buildOutput(wps, ctx);
@@ -1065,13 +951,13 @@ function initCollapsibles() {
 /* ── boot ──────────────────────────────────────────────────────────────────*/
 function bindShared() {
   SHARED_INPUTS.forEach(function (s) {
-    var el = $(s[0]); if (s[0] === 'metaDate') return;
+    var el = $(s[0]);
     el.addEventListener('input', function () { state.shared[s[1]][s[2]] = s[3] === 'num' ? num(el.value) : el.value; schedule(); });
+    el.addEventListener('change', function () { state.shared[s[1]][s[2]] = s[3] === 'num' ? num(el.value) : el.value; schedule(); });
   });
   $('trigSeg').querySelectorAll('.seg-btn').forEach(function (b) {
     b.addEventListener('click', function () { state.shared.camera.trigger = b.dataset.trig; syncSharedInputs(); schedule(); });
   });
-  $('togGeofence').addEventListener('click', function () { state.shared.safety.geofence = !state.shared.safety.geofence; syncSharedInputs(); schedule(); });
   $('fmtTabs').querySelectorAll('.fmt-tab').forEach(function (b) {
     b.addEventListener('click', function () { state.outFmt = b.dataset.fmt; syncSharedInputs(); render(); });
   });
@@ -1084,7 +970,22 @@ function init() {
   $('btnUndo').onclick = undo; $('btnRedo').onclick = redo;
   $('btnExport').onclick = exportSettings;
   $('importFile').addEventListener('change', function () { if (this.files[0]) importSettings(this.files[0]); this.value = ''; });
-  $('btnDownload').onclick = function () { var m = activeMission(), ctx = resolveContext(m), out = buildOutput(state.lastWps, ctx); var site = (ctx.metadata.site || 'airhub').replace(/\s+/g, '_'); dlBlob(out.content, out.mime, site + '_' + m.id + '_' + nowISO().slice(0, 10) + '.' + out.ext); flash('✓ ' + out.ext.toUpperCase() + ' downloaded'); };
+  $('btnDownload').onclick = function () { var m = activeMission(), ctx = resolveContext(m), out = buildOutput(state.lastWps, ctx); dlBlob(out.content, out.mime, 'airhub_' + m.id + '_' + nowISO().slice(0, 10) + '.' + out.ext); flash('✓ ' + out.ext.toUpperCase() + ' downloaded'); };
+  $('btnElevation').onclick = function () {
+    var m = activeMission(), ctx = resolveContext(m);
+    var pt = centerOf(m, ctx);
+    if (!pt) { var mc = mapCtrl.getCenter(); pt = { lat: mc.lat, lon: mc.lng }; }
+    var btn = $('btnElevation'); btn.disabled = true; btn.textContent = '…';
+    fetch('https://api.open-meteo.com/v1/elevation?latitude=' + pt.lat + '&longitude=' + pt.lon)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var elev = data.elevation && data.elevation[0];
+        if (elev != null) { state.shared.flight.ground = Math.round(elev * 10) / 10; $('ground').value = state.shared.flight.ground; schedule(); flash('✓ Ground: ' + state.shared.flight.ground + ' m AMSL'); }
+        else flash('✕ No elevation data', true);
+      })
+      .catch(function () { flash('✕ Elevation fetch failed', true); })
+      .finally(function () { btn.disabled = false; btn.textContent = '↓'; });
+  };
   $('btnPreview').onclick = previewOutput;
   $('modalClose').onclick = function () { $('modalBg').classList.remove('open'); };
   $('modalBg').addEventListener('click', function (e) { if (e.target === $('modalBg')) $('modalBg').classList.remove('open'); });
