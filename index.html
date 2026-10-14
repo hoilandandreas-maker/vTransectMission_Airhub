@@ -42,16 +42,33 @@ document.addEventListener('DOMContentLoaded', async function() {
   const loading = document.getElementById('__bundler_loading');
   function setStatus(msg) { if (loading) loading.textContent = msg; }
 
-  // Error sink persists across replaceWith since it's on window, not the DOM.
-  window.addEventListener('error', function(e) {
+  // Resource errors (e.g. unavailable map tiles) are not JavaScript failures.
+  // This listener survives the document swap, so keep diagnostics bounded.
+  const runtimeErrors = [];
+  function showRuntimeError(message) {
+    if (runtimeErrors.indexOf(message) !== -1) return;
+    runtimeErrors.push(message);
+    if (runtimeErrors.length > 5) runtimeErrors.shift();
     var p = document.body || document.documentElement;
-    var d = document.getElementById('__bundler_err') || p.appendChild(document.createElement('div'));
-    d.id = '__bundler_err';
-    d.style.cssText = 'position:fixed;bottom:12px;left:12px;right:12px;font:12px/1.4 ui-monospace,monospace;background:#2a1215;color:#ff8a80;padding:10px 14px;border-radius:8px;border:1px solid #5c2b2e;z-index:99999;white-space:pre-wrap;max-height:40vh;overflow:auto';
-    d.textContent = (d.textContent ? d.textContent + String.fromCharCode(10) : '') +
-      '[bundle] ' + (e.message || e.type) +
-      (e.filename ? ' (' + e.filename.slice(0, 60) + ':' + e.lineno + ')' : '');
-  }, true);
+    var d = document.getElementById('__bundler_err');
+    if (!d) {
+      d = p.appendChild(document.createElement('div'));
+      d.id = '__bundler_err';
+      d.style.cssText = 'position:fixed;bottom:12px;left:12px;right:12px;font:12px/1.4 ui-monospace,monospace;background:#2a1215;color:#ff8a80;padding:10px 14px;border-radius:8px;border:1px solid #5c2b2e;z-index:99999;max-height:120px;overflow:auto';
+      var close = document.createElement('button');
+      close.type = 'button'; close.textContent = 'Dismiss';
+      close.style.cssText = 'float:right;margin-left:12px;padding:4px 8px;cursor:pointer';
+      close.onclick = function() { d.remove(); runtimeErrors.length = 0; };
+      d.appendChild(close);
+      var details = document.createElement('pre'); details.id = '__bundler_err_details';
+      details.style.cssText = 'margin:0;white-space:pre-wrap'; d.appendChild(details);
+    }
+    document.getElementById('__bundler_err_details').textContent = runtimeErrors.join(String.fromCharCode(10));
+  }
+  window.addEventListener('error', function(e) {
+    if (!e.message) return; // image/tile/CSS load events have no runtime message
+    showRuntimeError('[app] ' + e.message + (e.filename ? ' (' + e.filename.slice(0, 60) + ':' + e.lineno + ')' : ''));
+  });
 
   try {
     const manifestEl = document.querySelector('script[type="__bundler/manifest"]');
@@ -156,7 +173,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         s.textContent = await r.text();
         s.removeAttribute('src');
       }
-      const p = s.src ? new Promise(function(r) { s.onload = s.onerror = r; }) : null;
+      const p = s.src ? new Promise(function(resolve, reject) { s.onload = resolve; s.onerror = function() { reject(new Error('Could not load required script: ' + s.src)); }; }) : null;
       old.replaceWith(s);
       if (p) await p;
     }
@@ -167,6 +184,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   } catch (err) {
     setStatus('Error unpacking: ' + err.message);
+    showRuntimeError('[bundle] ' + err.message);
     console.error('Bundle unpack error:', err);
   }
 });
