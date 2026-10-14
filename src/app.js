@@ -143,9 +143,9 @@ function autoHeadingDetails(A, B, POI) {
 
 /* ── mission registry ───────────────────────────────────────────────────── */
 var MISSIONS = {};
-var ORDER = ['transect', 'orbit', 'spiral', 'facade', 'corridor', 'perimeter'];
+var ORDER = ['route', 'transect', 'orbit', 'spiral', 'facade', 'corridor', 'perimeter'];
 var CATS = [
-  { name: 'Line', ids: ['transect', 'corridor', 'perimeter', 'facade'] },
+  { name: 'Line', ids: ['route', 'transect', 'corridor', 'perimeter', 'facade'] },
   { name: 'Inspection', ids: ['orbit', 'spiral'] }
 ];
 function reg(m) { MISSIONS[m.id] = m; }
@@ -153,6 +153,42 @@ var RING_COLORS = ['#4eadea', '#4ade80', '#fb923c', '#f87171', '#a78bfa', '#34d3
 var RING_LABELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 
 var DEMO = { lat: 58.92045759696814, lon: 5.7362006464208575 };
+
+/* ============================== MISSION: WAYPOINT ROUTE ================== */
+reg({
+  id: 'route', label: 'Waypoint route', cat: 'Line', icon: 'route',
+  desc: 'Place waypoints in flight order. Drag numbered markers to adjust the route. Select POI to place or move a target; POI heading keeps the aircraft facing it. Gimbal pitch is set separately. No extra survey lanes or intermediate waypoints are added.',
+  geometry: 'ROUTE', hasProfile: true,
+  defaults: { vertices: [], POI: { lat: DEMO.lat, lon: DEMO.lon }, alt: 30, pitch: -30, yawMode: 'towardPOI', fixedHeading: 0 },
+  fields: [
+    { key: 'alt', label: 'Altitude AGL', unit: 'm', type: 'number', step: 1, min: 1 },
+    { key: 'pitch', label: 'Gimbal pitch', unit: '°', type: 'number', step: 1, min: -90, max: 0 },
+    { key: 'yawMode', label: 'Heading', type: 'seg', options: [{ v: 'towardPOI', l: 'POI' }, { v: 'followWayline', l: 'Follow route' }, { v: 'fixed', l: 'Fixed' }] },
+    { key: 'fixedHeading', label: 'Fixed heading', unit: '°', type: 'number', step: 1, min: 0, max: 359, showIf: function (p) { return p.yawMode === 'fixed'; } }
+  ],
+  buildWaypoints: function (c) {
+    return c.vertices.map(function (v) {
+      if (c.yawMode === 'fixed') return wpPhoto(v.lat, v.lon, c.ground + c.alt, c.speed, c.fixedHeading, c.pitch, c);
+      var acts = [gimbal(c.pitch)];
+      if (trigShot(c)) acts.push(photo());
+      var wp = { location: loc(v.lat, v.lon, c.ground + c.alt), waypointType: 'waypoint', headingMode: c.yawMode, speed: c.speed, actions: acts };
+      if (c.yawMode === 'towardPOI') wp.poiCoordinate = { lat: r7(c.POI.lat), lon: r7(c.POI.lon) };
+      return wp;
+    });
+  },
+  drawMap: function (c, H) {
+    if (c.vertices.length > 1) H.line(c.vertices.map(function (v) { return [v.lat, v.lon]; }), { color: '#4eadea', weight: 2 });
+  },
+  summary: function (c) { return c.vertices.length + ' route points · ' + (c.yawMode === 'towardPOI' ? 'facing POI' : c.yawMode === 'fixed' ? 'fixed heading' : 'follow route'); },
+  validate: function (c) {
+    var errs = [];
+    if (c.vertices.length < 2) errs.push('Place at least 2 route waypoints on the map');
+    if (!isFinite(c.alt) || c.alt < 1) errs.push('Route altitude must be at least 1 m AGL');
+    if (!isFinite(c.pitch) || c.pitch < -90 || c.pitch > 0) errs.push('Gimbal pitch must be between -90° and 0°');
+    if (c.yawMode === 'towardPOI' && (!c.POI || !isFinite(c.POI.lat) || !isFinite(c.POI.lon) || Math.abs(c.POI.lat) > 90 || Math.abs(c.POI.lon) > 180)) errs.push('Set valid POI coordinates');
+    return { errs: errs, warns: [] };
+  }
+});
 
 /* ============================== MISSION: TRANSECT ========================= */
 reg({
@@ -515,6 +551,7 @@ var state = {
 window.__AHW_state = state; // exposed for debugging/verification
 
 function ensureDefaults(id) { if (!state.params[id]) state.params[id] = clone(MISSIONS[id].defaults); }
+function editableVertices() { ensureDefaults(state.activeMissionType); return state.activeMissionType === 'route' ? state.params.route.vertices : state.geometry.vertices; }
 function activeMission() { return MISSIONS[state.activeMissionType]; }
 function resolveContext(m) {
   ensureDefaults(m.id);
@@ -522,7 +559,7 @@ function resolveContext(m) {
     speed: s.flight.speed, ground: s.flight.ground,
     trigger: s.camera.trigger, photoDistance: s.camera.photoDistance, frontOverlap: s.camera.frontOverlap, sideOverlap: s.camera.sideOverlap,
     camera: s.camera,
-    vertices: state.geometry.vertices
+    vertices: editableVertices()
   };
   var p = state.params[m.id]; for (var k in p) ctx[k] = p[k];
   return ctx;
@@ -551,14 +588,17 @@ var mapCtrl = (function () {
   function onClick(e) {
     var ll = { lat: +e.latlng.lat.toFixed(7), lon: +e.latlng.lng.toFixed(7) };
     var m = activeMission();
-    if (m.geometry === 'POINTS') {
+    if (m.id === 'route' && document.querySelector('input[name="routeMode"]:checked').value === 'poi') {
+      state.params.route.POI = ll;
+    } else if (m.geometry === 'POINTS') {
       var radio = document.querySelector('input[name="ptmode"]:checked');
       var key = radio ? radio.value : m.points[0].key;
       ensureDefaults(m.id); state.params[m.id][key] = ll;
     } else {
-      state.geometry.vertices.push(ll);
+      editableVertices().push(ll);
     }
     saveHist(); render();
+    if (m.id === 'route') renderGeomControls();
   }
   function buildHelpers() {
     var arr = [];
@@ -578,7 +618,13 @@ var mapCtrl = (function () {
         mk.on('dragend', function (ev) { var p = ev.target.getLatLng(); state.params[m.id][pt.key] = { lat: +p.lat.toFixed(7), lon: +p.lng.toFixed(7) }; saveHist(); render(); });
       });
     } else {
-      var vs = state.geometry.vertices, latlngs = vs.map(function (v) { return [v.lat, v.lon]; });
+      if (m.id === 'route') {
+        var poi = ctx.POI;
+        var pm = L.marker([poi.lat, poi.lon], { icon: dotIcon('#fb923c'), draggable: true }).addTo(editLayer);
+        pm.bindTooltip('POI', { permanent: true, direction: 'top' });
+        pm.on('dragend', function (ev) { var p = ev.target.getLatLng(); state.params.route.POI = { lat: r7(p.lat), lon: r7(p.lng) }; saveHist(); render(); renderGeomControls(); });
+      }
+      var vs = editableVertices(), latlngs = vs.map(function (v) { return [v.lat, v.lon]; });
       if (vs.length >= 2) {
         if (m.geometry === 'POLYGON') L.polygon(latlngs, { color: '#4eadea', weight: 1, opacity: 0.6, fillOpacity: 0.05, dashArray: '4 4' }).addTo(editLayer);
         else L.polyline(latlngs, { color: '#4eadea', weight: 1, opacity: 0.6, dashArray: '4 4' }).addTo(editLayer);
@@ -586,7 +632,7 @@ var mapCtrl = (function () {
       vs.forEach(function (v, i) {
         var mk = L.marker([v.lat, v.lon], { icon: dotIcon('#4eadea', 11), draggable: true, keyboard: false }).addTo(editLayer);
         mk.bindTooltip(String(i + 1), { permanent: false, direction: 'top' });
-        mk.on('dragend', function (ev) { var p = ev.target.getLatLng(); state.geometry.vertices[i] = { lat: +p.lat.toFixed(7), lon: +p.lng.toFixed(7) }; saveHist(); render(); });
+        mk.on('dragend', function (ev) { var p = ev.target.getLatLng(); editableVertices()[i] = { lat: +p.lat.toFixed(7), lon: +p.lng.toFixed(7) }; saveHist(); render(); });
       });
     }
   }
@@ -655,7 +701,7 @@ function showTopDownNote(m) {
   svg.appendChild(t);
 }
 
-/* ── export (AirHub / KML / CSV) ───────────────────────────────────────────*/
+/* ── export (AirHub / KML / KMZ / CSV) ───────────────────────────────────────────*/
 function toAirHub(wps) { return JSON.stringify(wps, null, 2); }
 function toKML(wps, ctx) {
   var site = 'AirHub Mission';
@@ -666,6 +712,32 @@ function toKML(wps, ctx) {
   });
   lines.push('  <Placemark><styleUrl>#path</styleUrl><name>Flight path</name>', '    <LineString><altitudeMode>relativeToGround</altitudeMode>', '      <coordinates>' + wps.map(function (w) { return w.location.lon + ',' + w.location.lat + ',' + w.location.alt; }).join(' ') + '</coordinates>', '    </LineString></Placemark>', '</Document></kml>');
   return lines.join('\n');
+}
+// Store doc.kml in a standards-compliant ZIP without external dependencies.
+// KMZ previews remain readable KML; only the download is binary.
+function toKMZ(kml) {
+  var name = new TextEncoder().encode('doc.kml'), data = new TextEncoder().encode(kml);
+  var crc = 0xffffffff;
+  for (var i = 0; i < data.length; i++) {
+    crc ^= data[i];
+    for (var bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+  }
+  crc = (crc ^ 0xffffffff) >>> 0;
+  var localSize = 30 + name.length + data.length, centralSize = 46 + name.length;
+  var bytes = new Uint8Array(localSize + centralSize + 22), view = new DataView(bytes.buffer);
+  function u16(offset, value) { view.setUint16(offset, value, true); }
+  function u32(offset, value) { view.setUint32(offset, value, true); }
+  u32(0, 0x04034b50); u16(4, 20); u16(12, 33); // stored entry, 1980-01-01
+  u32(14, crc); u32(18, data.length); u32(22, data.length); u16(26, name.length);
+  bytes.set(name, 30); bytes.set(data, 30 + name.length);
+  var c = localSize;
+  u32(c, 0x02014b50); u16(c + 4, 20); u16(c + 6, 20); u16(c + 14, 33);
+  u32(c + 16, crc); u32(c + 20, data.length); u32(c + 24, data.length); u16(c + 28, name.length);
+  bytes.set(name, c + 46);
+  var end = c + centralSize;
+  u32(end, 0x06054b50); u16(end + 8, 1); u16(end + 10, 1);
+  u32(end + 12, centralSize); u32(end + 16, localSize);
+  return bytes;
 }
 function toCSV(wps) {
   var rows = ['index,type,latitude,longitude,altitude_m,pitch_deg,heading_deg,heading_mode,speed_mps,trigger'];
@@ -686,6 +758,7 @@ function buildOutput(wps, ctx) {
     all = [homeWp].concat(wps).concat([clone(homeWp)]);
   }
   if (state.outFmt === 'kml') return { content: toKML(all, ctx), ext: 'kml', mime: 'application/vnd.google-earth.kml+xml', name: 'mission.kml' };
+  if (state.outFmt === 'kmz') return { content: toKML(all, ctx), ext: 'kmz', mime: 'application/vnd.google-earth.kmz', name: 'mission.kmz' };
   if (state.outFmt === 'csv') return { content: toCSV(all), ext: 'csv', mime: 'text/csv', name: 'mission.csv' };
   return { content: toAirHub(all), ext: 'json', mime: 'application/json', name: 'mission.json' };
 }
@@ -749,6 +822,8 @@ function renderPresets() {
 }
 function renderGeomControls() {
   var m = activeMission(), host = $('geomControls'), title = $('geomTitle');
+  var oldRouteMode = document.querySelector('input[name="routeMode"]:checked');
+  var routeMode = oldRouteMode ? oldRouteMode.value : 'waypoint';
   host.innerHTML = '';
   if (m.geometry === 'POINTS') {
     title.textContent = 'Coordinates';
@@ -768,13 +843,24 @@ function renderGeomControls() {
       g.appendChild(grid); host.appendChild(g);
     });
   } else {
+    if (m.id === 'route') {
+      ensureDefaults(m.id);
+      var selection = document.createElement('div'); selection.className = 'hint';
+      selection.innerHTML = '<label><input type="radio" name="routeMode" value="waypoint" checked>Add waypoint</label> · <label><input type="radio" name="routeMode" value="poi">Set POI</label>';
+      host.appendChild(selection);
+      selection.querySelector('input[value="' + routeMode + '"]').checked = true;
+      var target = state.params.route.POI;
+      var coords = document.createElement('div'); coords.className = 'grid-2';
+      ['lat', 'lon'].forEach(function (key) { coords.appendChild(fieldEl({ label: 'POI ' + (key === 'lat' ? 'latitude' : 'longitude'), type: 'number', step: 'any' }, target[key], function (v) { target[key] = num(v); schedule(); })); });
+      host.appendChild(coords);
+    }
     title.textContent = m.geometry === 'POLYGON' ? 'Area (polygon)' : 'Path (polyline)';
     var tb = document.createElement('div'); tb.className = 'geom-toolbar';
     var bRem = document.createElement('button'); bRem.className = 'btn-xs'; bRem.innerHTML = '<i data-lucide="corner-up-left"></i>Remove last';
-    bRem.onclick = function () { if (state.geometry.vertices.length) { state.geometry.vertices.pop(); mapCtrl.resetFit(); saveHist(); render(); } };
+    bRem.onclick = function () { if (editableVertices().length) { editableVertices().pop(); mapCtrl.resetFit(); saveHist(); render(); renderGeomControls(); } };
     var bClr = document.createElement('button'); bClr.className = 'btn-xs danger'; bClr.innerHTML = '<i data-lucide="trash-2"></i>Clear';
-    bClr.onclick = function () { state.geometry.vertices = []; mapCtrl.resetFit(); saveHist(); render(); };
-    var cnt = document.createElement('span'); cnt.className = 'vtx-count'; cnt.textContent = state.geometry.vertices.length + ' pts';
+    bClr.onclick = function () { if (m.id === 'route') state.params.route.vertices = []; else state.geometry.vertices = []; mapCtrl.resetFit(); saveHist(); render(); renderGeomControls(); renderGeomControls(); };
+    var cnt = document.createElement('span'); cnt.className = 'vtx-count'; cnt.textContent = editableVertices().length + ' pts';
     tb.appendChild(bRem); tb.appendChild(bClr); tb.appendChild(cnt); host.appendChild(tb);
     var hint = document.createElement('div'); hint.className = 'hint';
     hint.textContent = 'Click the map to add ' + (m.geometry === 'POLYGON' ? 'area corners' : 'path points') + '. Drag markers to adjust.';
@@ -966,7 +1052,7 @@ function importSettings(file) {
 /* ── modal + flash ─────────────────────────────────────────────────────────*/
 function previewOutput() {
   var m = activeMission(), ctx = resolveContext(m), out = buildOutput(state.lastWps, ctx);
-  $('modalTitle').textContent = 'Output preview — ' + out.ext.toUpperCase();
+  $('modalTitle').textContent = 'Output preview — ' + (out.ext === 'kmz' ? 'KMZ · doc.kml' : out.ext.toUpperCase());
   $('modalBody').textContent = out.content.length > 60000 ? out.content.slice(0, 60000) + '\n… (truncated)' : out.content;
   $('modalBg').classList.add('open');
 }
@@ -1008,7 +1094,7 @@ function init() {
   $('btnUndo').onclick = undo; $('btnRedo').onclick = redo;
   $('btnExport').onclick = exportSettings;
   $('importFile').addEventListener('change', function () { if (this.files[0]) importSettings(this.files[0]); this.value = ''; });
-  $('btnDownload').onclick = function () { var m = activeMission(), ctx = resolveContext(m), out = buildOutput(state.lastWps, ctx); dlBlob(out.content, out.mime, 'airhub_' + m.id + '_' + nowISO().slice(0, 10) + '.' + out.ext); flash('✓ ' + out.ext.toUpperCase() + ' downloaded'); };
+  $('btnDownload').onclick = function () { var m = activeMission(), ctx = resolveContext(m), out = buildOutput(state.lastWps, ctx); dlBlob(out.ext === 'kmz' ? toKMZ(out.content) : out.content, out.mime, 'airhub_' + m.id + '_' + nowISO().slice(0, 10) + '.' + out.ext); flash('✓ ' + out.ext.toUpperCase() + ' downloaded'); };
   $('btnElevation').onclick = function () {
     var m = activeMission(), ctx = resolveContext(m);
     var pt = centerOf(m, ctx);
