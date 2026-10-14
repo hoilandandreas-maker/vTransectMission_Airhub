@@ -263,3 +263,11 @@ Follow route, or Fixed heading. Altitude AGL, speed and gimbal pitch apply to th
 whole route. POI controls aircraft heading; gimbal pitch is configured separately.
 Remove last and Clear edit the route. Route points are saved separately from
 survey geometry and included in settings exports. All four export formats work.
+
+### POI import compatibility
+
+AirHub JSON and DJI KMZ export convert POI heading to a manually specified fixed
+bearing at each waypoint, with a rotate-yaw action before camera actions. The
+planner and saved settings retain the editable POI. Exported flight missions
+contain no dynamic POI mode or POI coordinate. The aircraft faces the target
+at each waypoint; continuous POI tracking between waypoints is not provided.
