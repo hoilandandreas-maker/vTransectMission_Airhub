@@ -713,32 +713,82 @@ function toKML(wps, ctx) {
   lines.push('  <Placemark><styleUrl>#path</styleUrl><name>Flight path</name>', '    <LineString><altitudeMode>relativeToGround</altitudeMode>', '      <coordinates>' + wps.map(function (w) { return w.location.lon + ',' + w.location.lat + ',' + w.location.alt; }).join(' ') + '</coordinates>', '    </LineString></Placemark>', '</Document></kml>');
   return lines.join('\n');
 }
-// Store doc.kml in a standards-compliant ZIP without external dependencies.
-// KMZ previews remain readable KML; only the download is binary.
-function toKMZ(kml) {
-  var name = new TextEncoder().encode('doc.kml'), data = new TextEncoder().encode(kml);
-  var crc = 0xffffffff;
-  for (var i = 0; i < data.length; i++) {
-    crc ^= data[i];
-    for (var bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+var DJI_MODELS = { m4td: { drone: 100, sub: 1, payload: 99 }, m30t: { drone: 67, sub: 1, payload: 53 }, m350: { drone: 89, sub: 0 }, m400: { drone: 103, sub: 0 } };
+function djiSettings() {
+  if (!state.shared.dji) state.shared.dji = { model: '', payload: '82', position: '0', takeoffHeight: 20, rthHeight: 60 };
+  return state.shared.dji;
+}
+function wpmlTag(key, value) { return '<wpml:' + key + '>' + value + '</wpml:' + key + '>'; }
+function toDJIFiles(wps, ctx) {
+  var settings = djiSettings(), model = DJI_MODELS[settings.model];
+  if (!model) return null;
+  var t = wpmlTag, pos = model.payload ? 0 : +settings.position, payload = model.payload || +settings.payload;
+  var lens = { wide: 'wide', zoom: 'zoom', infrared: 'ir', narrowband: 'wide' }[ctx.camera && ctx.camera.lens] || 'wide';
+  var config = '<wpml:missionConfig>' + t('flyToWaylineMode', 'safely') + t('finishAction', 'goHome') + t('exitOnRCLost', 'executeLostAction') + t('executeRCLostAction', 'goBack') + t('takeOffSecurityHeight', settings.takeoffHeight) + t('globalTransitionalSpeed', ctx.speed) + t('globalRTHHeight', settings.rthHeight) + '<wpml:droneInfo>' + t('droneEnumValue', model.drone) + t('droneSubEnumValue', model.sub) + '</wpml:droneInfo><wpml:payloadInfo>' + t('payloadEnumValue', payload) + t('payloadSubEnumValue', 0) + t('payloadPositionIndex', pos) + '</wpml:payloadInfo></wpml:missionConfig>';
+  var turn = '<wpml:waypointTurnParam>' + t('waypointTurnMode', 'toPointAndStopWithDiscontinuityCurvature') + t('waypointTurnDampingDist', 0) + '</wpml:waypointTurnParam>';
+  var lastHeading = 0;
+  function heading(wp) {
+    var angle = wp.heading != null ? wp.heading : lastHeading;
+    (wp.actions || []).forEach(function (a) { if (a.type === 'rotateYaw') angle = a.parameters.rotateYaw.aircraftHeading; });
+    lastHeading = angle;
+    angle = ((angle + 180) % 360 + 360) % 360 - 180;
+    var mode = wp.headingMode || 'followWayline';
+    return '<wpml:waypointHeadingParam>' + t('waypointHeadingMode', mode) + t('waypointHeadingAngle', angle) + (mode === 'towardPOI' && wp.poiCoordinate ? t('waypointPoiPoint', wp.poiCoordinate.lat + ',' + wp.poiCoordinate.lon + ',0') : '') + t('waypointHeadingPathMode', 'followBadArc') + '</wpml:waypointHeadingParam>';
   }
-  crc = (crc ^ 0xffffffff) >>> 0;
-  var localSize = 30 + name.length + data.length, centralSize = 46 + name.length;
+  function actions(wp, index) {
+    var parts = [];
+    (wp.actions || []).forEach(function (a) {
+      var params;
+      if (a.type === 'gimbalRotate') {
+        params = t('gimbalHeadingYawBase', 'north') + t('gimbalRotateMode', 'absoluteAngle') + t('gimbalPitchRotateEnable', 1) + t('gimbalPitchRotateAngle', a.parameters.gimbalRotate.pitch) + t('gimbalRollRotateEnable', 0) + t('gimbalRollRotateAngle', 0) + t('gimbalYawRotateEnable', 0) + t('gimbalYawRotateAngle', 0) + t('gimbalRotateTimeEnable', 0) + t('gimbalRotateTime', 0) + t('payloadPositionIndex', pos);
+      } else if (a.type === 'takePhoto') {
+        params = t('fileSuffix', 'WP' + index) + t('payloadPositionIndex', pos) + t('payloadLensIndex', lens) + t('useGlobalPayloadLensIndex', 0);
+      } else if (a.type === 'rotateYaw') {
+        var angle = a.parameters.rotateYaw.aircraftHeading;
+        params = t('aircraftHeading', ((angle + 180) % 360 + 360) % 360 - 180) + t('aircraftPathMode', a.parameters.rotateYaw.aircraftPathMode || 'clockwise');
+      } else { throw new Error('Unsupported DJI action: ' + a.type); }
+      parts.push('<wpml:action>' + t('actionId', parts.length) + t('actionActuatorFunc', a.type) + '<wpml:actionActuatorFuncParam>' + params + '</wpml:actionActuatorFuncParam></wpml:action>');
+    });
+    return parts.length ? '<wpml:actionGroup>' + t('actionGroupId', index) + t('actionGroupStartIndex', index) + t('actionGroupEndIndex', index) + t('actionGroupMode', 'sequence') + '<wpml:actionTrigger>' + t('actionTriggerType', 'reachPoint') + '</wpml:actionTrigger>' + parts.join('') + '</wpml:actionGroup>' : '';
+  }
+  var templatePoints = [], executePoints = [];
+  wps.forEach(function (wp, i) {
+    var agl = r3(wp.location.alt - ctx.ground), pitch = 0;
+    (wp.actions || []).forEach(function (a) { if (a.type === 'gimbalRotate') pitch = a.parameters.gimbalRotate.pitch; });
+    var point = '<Point><coordinates>' + wp.location.lon + ',' + wp.location.lat + '</coordinates></Point>' + t('index', i);
+    var common = t('waypointSpeed', wp.speed || ctx.speed) + heading(wp) + turn + t('useStraightLine', 1) + actions(wp, i);
+    templatePoints.push('<Placemark>' + point + t('useGlobalHeight', 0) + t('height', agl) + t('useGlobalSpeed', 0) + t('useGlobalHeadingParam', 0) + t('useGlobalTurnParam', 0) + t('gimbalPitchAngle', pitch) + common + '</Placemark>');
+    executePoints.push('<Placemark>' + point + t('executeHeight', agl) + common + '</Placemark>');
+  });
+  function wrap(folder, metadata) { return '<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:wpml="http://www.dji.com/wpmz/1.0.2"><Document>' + (metadata || '') + config + '<Folder>' + folder + '</Folder></Document></kml>'; }
+  var folder = t('templateType', 'waypoint') + t('templateId', 0) + '<wpml:waylineCoordinateSysParam>' + t('coordinateMode', 'WGS84') + t('heightMode', 'relativeToStartPoint') + t('positioningType', 'GPS') + '</wpml:waylineCoordinateSysParam>' + t('autoFlightSpeed', ctx.speed) + t('globalHeight', wps.length ? r3(wps[0].location.alt - ctx.ground) : 30) + t('gimbalPitchMode', 'usePointSetting') + t('globalWaypointTurnMode', 'toPointAndStopWithDiscontinuityCurvature') + t('globalUseStraightLine', 1) + '<wpml:globalWaypointHeadingParam>' + t('waypointHeadingMode', 'followWayline') + t('waypointHeadingAngle', 0) + t('waypointHeadingPathMode', 'followBadArc') + '</wpml:globalWaypointHeadingParam>' + '<wpml:payloadParam>' + t('payloadPositionIndex', pos) + t('imageFormat', lens) + '</wpml:payloadParam>' + templatePoints.join('\n');
+  return [ { name: 'wpmz/template.kml', content: wrap(folder, t('author', 'AirHub Waypoint Creator') + t('createTime', Date.now()) + t('updateTime', Date.now())) }, { name: 'wpmz/waylines.wpml', content: wrap(t('templateId', 0) + t('waylineId', 0) + t('executeHeightMode', 'relativeToStartPoint') + t('autoFlightSpeed', ctx.speed) + executePoints.join('\n')) } ];
+}
+// ZIP stored entries keep the exporter fully offline and dependency-free.
+function toKMZ(files) {
+  var entries = files.map(function (file) {
+    var name = new TextEncoder().encode(file.name), data = new TextEncoder().encode(file.content), crc = 0xffffffff;
+    for (var i = 0; i < data.length; i++) { crc ^= data[i]; for (var bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0); }
+    return { name: name, data: data, crc: (crc ^ 0xffffffff) >>> 0 };
+  });
+  var localSize = 0, centralSize = 0;
+  entries.forEach(function (e) { e.offset = localSize; localSize += 30 + e.name.length + e.data.length; centralSize += 46 + e.name.length; });
   var bytes = new Uint8Array(localSize + centralSize + 22), view = new DataView(bytes.buffer);
-  function u16(offset, value) { view.setUint16(offset, value, true); }
-  function u32(offset, value) { view.setUint32(offset, value, true); }
-  u32(0, 0x04034b50); u16(4, 20); u16(12, 33); // stored entry, 1980-01-01
-  u32(14, crc); u32(18, data.length); u32(22, data.length); u16(26, name.length);
-  bytes.set(name, 30); bytes.set(data, 30 + name.length);
+  function u16(o, v) { view.setUint16(o, v, true); } function u32(o, v) { view.setUint32(o, v, true); }
   var c = localSize;
-  u32(c, 0x02014b50); u16(c + 4, 20); u16(c + 6, 20); u16(c + 14, 33);
-  u32(c + 16, crc); u32(c + 20, data.length); u32(c + 24, data.length); u16(c + 28, name.length);
-  bytes.set(name, c + 46);
-  var end = c + centralSize;
-  u32(end, 0x06054b50); u16(end + 8, 1); u16(end + 10, 1);
-  u32(end + 12, centralSize); u32(end + 16, localSize);
+  entries.forEach(function (e) {
+    var o = e.offset;
+    u32(o, 0x04034b50); u16(o + 4, 20); u16(o + 6, 0x800); u16(o + 12, 33);
+    u32(o + 14, e.crc); u32(o + 18, e.data.length); u32(o + 22, e.data.length); u16(o + 26, e.name.length);
+    bytes.set(e.name, o + 30); bytes.set(e.data, o + 30 + e.name.length);
+    u32(c, 0x02014b50); u16(c + 4, 20); u16(c + 6, 20); u16(c + 8, 0x800); u16(c + 14, 33);
+    u32(c + 16, e.crc); u32(c + 20, e.data.length); u32(c + 24, e.data.length); u16(c + 28, e.name.length); u32(c + 42, o);
+    bytes.set(e.name, c + 46); c += 46 + e.name.length;
+  });
+  u32(c, 0x06054b50); u16(c + 8, entries.length); u16(c + 10, entries.length); u32(c + 12, centralSize); u32(c + 16, localSize);
   return bytes;
 }
+
 function toCSV(wps) {
   var rows = ['index,type,latitude,longitude,altitude_m,pitch_deg,heading_deg,heading_mode,speed_mps,trigger'];
   wps.forEach(function (wp, i) {
@@ -758,7 +808,10 @@ function buildOutput(wps, ctx) {
     all = [homeWp].concat(wps).concat([clone(homeWp)]);
   }
   if (state.outFmt === 'kml') return { content: toKML(all, ctx), ext: 'kml', mime: 'application/vnd.google-earth.kml+xml', name: 'mission.kml' };
-  if (state.outFmt === 'kmz') return { content: toKML(all, ctx), ext: 'kmz', mime: 'application/vnd.google-earth.kmz', name: 'mission.kmz' };
+  if (state.outFmt === 'kmz') {
+    var files = toDJIFiles(wps, ctx);
+    return { content: files ? files.map(function (f) { return '<!-- ' + f.name + ' -->\n' + f.content; }).join('\n\n') : 'Select a DJI aircraft before downloading.', files: files, ext: 'kmz', mime: 'application/vnd.google-earth.kmz', name: 'mission.kmz' };
+  }
   if (state.outFmt === 'csv') return { content: toCSV(all), ext: 'csv', mime: 'text/csv', name: 'mission.csv' };
   return { content: toAirHub(all), ext: 'json', mime: 'application/json', name: 'mission.json' };
 }
@@ -781,6 +834,17 @@ function updateStats(wps, ctx) {
 }
 function sharedValidate(ctx, wps) {
   var e = [], w = [];
+  if (state.outFmt === 'kmz') {
+    var dji = djiSettings();
+    if (!DJI_MODELS[dji.model]) e.push('Select the DJI aircraft for KMZ export');
+    if (dji.takeoffHeight < 1.2 || dji.takeoffHeight > 1500) e.push('DJI safe takeoff height must be 1.2–1500 m');
+    if (dji.rthHeight < 20 || dji.rthHeight > 1500) e.push('DJI RTH height must be 20–1500 m');
+    if (wps.some(function (wp) { return wp.location.alt - ctx.ground < 1.2; })) e.push('DJI waypoints must be at least 1.2 m above takeoff');
+    if ((dji.model === 'm400' || dji.model === 'm350') && ctx.camera && ctx.camera.lens === 'infrared' && dji.payload === '82') e.push('Select H30T for infrared capture');
+    if (ctx.speed > 15) e.push('DJI transition speed must be at most 15 m/s');
+    if (wps.some(function (wp) { return !isFinite(wp.location.lat) || !isFinite(wp.location.lon) || !isFinite(wp.location.alt) || Math.abs(wp.location.lat) > 90 || Math.abs(wp.location.lon) > 180; })) e.push('DJI route contains invalid coordinates or heights');
+    w.push('DJI heights are relative to takeoff; terrain following is disabled. Finish and RC loss: return home.');
+  }
   if (ctx.speed < 0.5) e.push('Speed too low (min 0.5 m/s)');
   if (wps.length > 2000) w.push(wps.length + ' waypoints — large mission, controllers may truncate');
   return { errs: e, warns: w };
@@ -957,6 +1021,7 @@ var SHARED_INPUTS = [
   ['frontOverlap', 'camera', 'frontOverlap', 'num'], ['sideOverlap', 'camera', 'sideOverlap', 'num']
 ];
 function syncSharedInputs() {
+  syncDJIInputs();
   SHARED_INPUTS.forEach(function (s) { var v = state.shared[s[1]][s[2]]; $(s[0]).value = (v == null ? '' : v); });
   $('trigSeg').querySelectorAll('.seg-btn').forEach(function (b) { b.classList.toggle('on', b.dataset.trig === state.shared.camera.trigger); });
   $('distanceField').style.display = state.shared.camera.trigger === 'distance' ? '' : 'none';
@@ -1052,7 +1117,7 @@ function importSettings(file) {
 /* ── modal + flash ─────────────────────────────────────────────────────────*/
 function previewOutput() {
   var m = activeMission(), ctx = resolveContext(m), out = buildOutput(state.lastWps, ctx);
-  $('modalTitle').textContent = 'Output preview — ' + (out.ext === 'kmz' ? 'KMZ · doc.kml' : out.ext.toUpperCase());
+  $('modalTitle').textContent = 'Output preview — ' + (out.ext === 'kmz' ? 'DJI KMZ · template.kml + waylines.wpml' : out.ext.toUpperCase());
   $('modalBody').textContent = out.content.length > 60000 ? out.content.slice(0, 60000) + '\n… (truncated)' : out.content;
   $('modalBg').classList.add('open');
 }
@@ -1073,7 +1138,21 @@ function initCollapsibles() {
 }
 
 /* ── boot ──────────────────────────────────────────────────────────────────*/
+function syncDJIInputs() {
+  var d = djiSettings();
+  $('djiOptions').style.display = state.outFmt === 'kmz' ? '' : 'none';
+  $('djiModel').value = d.model;
+  var fixed = d.model === 'm4td' || d.model === 'm30t';
+  $('djiPayloadField').style.display = fixed ? 'none' : '';
+  $('djiPositionField').style.display = fixed ? 'none' : '';
+  $('djiPayload').value = d.payload; $('djiPosition').value = d.position;
+  $('djiTakeoffHeight').value = d.takeoffHeight; $('djiRTHHeight').value = d.rthHeight;
+  Array.from($('djiPayload').options).forEach(function (o) { o.disabled = d.model === 'm400' && o.value !== '82' && o.value !== '83'; });
+}
 function bindShared() {
+  [['djiModel', 'model'], ['djiPayload', 'payload'], ['djiPosition', 'position'], ['djiTakeoffHeight', 'takeoffHeight'], ['djiRTHHeight', 'rthHeight']].forEach(function (pair) {
+    $(pair[0]).onchange = function () { var d = djiSettings(); d[pair[1]] = this.type === 'number' ? num(this.value) : this.value; if (d.model === 'm400' && d.payload !== '82' && d.payload !== '83') d.payload = '82'; syncDJIInputs(); saveHist(); render(); };
+  });
   SHARED_INPUTS.forEach(function (s) {
     var el = $(s[0]);
     el.addEventListener('input', function () { state.shared[s[1]][s[2]] = s[3] === 'num' ? num(el.value) : el.value; schedule(); });
@@ -1094,7 +1173,7 @@ function init() {
   $('btnUndo').onclick = undo; $('btnRedo').onclick = redo;
   $('btnExport').onclick = exportSettings;
   $('importFile').addEventListener('change', function () { if (this.files[0]) importSettings(this.files[0]); this.value = ''; });
-  $('btnDownload').onclick = function () { var m = activeMission(), ctx = resolveContext(m), out = buildOutput(state.lastWps, ctx); dlBlob(out.ext === 'kmz' ? toKMZ(out.content) : out.content, out.mime, 'airhub_' + m.id + '_' + nowISO().slice(0, 10) + '.' + out.ext); flash('✓ ' + out.ext.toUpperCase() + ' downloaded'); };
+  $('btnDownload').onclick = function () { var m = activeMission(), ctx = resolveContext(m), out = buildOutput(state.lastWps, ctx); dlBlob(out.ext === 'kmz' ? toKMZ(out.files) : out.content, out.mime, 'airhub_' + m.id + '_' + nowISO().slice(0, 10) + '.' + out.ext); flash('✓ ' + out.ext.toUpperCase() + ' downloaded'); };
   $('btnElevation').onclick = function () {
     var m = activeMission(), ctx = resolveContext(m);
     var pt = centerOf(m, ctx);
