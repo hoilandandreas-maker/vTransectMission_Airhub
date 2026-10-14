@@ -53,7 +53,7 @@ no login, no backend.
   waypoint, or at a fixed distance interval in metres — AirHub has no time-based trigger),
   altitude/speed limits and geofence, and operator/site/date/notes, all shared across
   mission types.
-- **Three export formats** — AirHub mission JSON, KML, and CSV, with copy, preview, and
+- **Four export formats** — AirHub mission JSON, KML, KMZ, and CSV, with copy, preview, and
   download.
 
 ## Using it
@@ -232,3 +232,18 @@ Single line-icon set with consistent stroke. The Figma frame didn't ship the act
 2. Add additional mission patterns if needed.
 3. Verify accent blue against the live AirHub dashboard if applicable.
 4. Replace the Lucide icon substitution with the real AirHub icon set if one exists.
+
+KMZ downloads contain `doc.kml` with the same waypoint order, coordinates, altitudes,
+and flight path as KML export, including home points when configured. The preview
+and copy controls show the KML inside the archive. This is a geographic KMZ export,
+not a DJI WPML flight mission.
+
+### Normal waypoint route with POI
+
+Choose **Waypoint route** under Line. Click **Add waypoint** and place at least
+two points in flight order; drag numbered markers to adjust them. Use **Set POI**
+to place the target on the map, or enter its latitude and longitude. Choose POI,
+Follow route, or Fixed heading. Altitude AGL, speed and gimbal pitch apply to the
+whole route. POI controls aircraft heading; gimbal pitch is configured separately.
+Remove last and Clear edit the route. Route points are saved separately from
+survey geometry and included in settings exports. All four export formats work.
