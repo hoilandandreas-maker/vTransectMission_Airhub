@@ -702,7 +702,23 @@ function showTopDownNote(m) {
 }
 
 /* ── export (AirHub / KML / KMZ / CSV) ───────────────────────────────────────────*/
-function toAirHub(wps) { return JSON.stringify(wps, null, 2); }
+// Importers may reject dynamic POI heading. Bake a bearing into each waypoint.
+// Clone the mission so editing, previews and settings retain the original POI.
+function toManualHeadings(wps) {
+  return wps.map(function (original) {
+    var wp = clone(original);
+    if (wp.headingMode !== 'towardPOI') return wp;
+    var target = wp.poiCoordinate;
+    if (!target || !isFinite(target.lat) || !isFinite(target.lon)) throw new Error('POI waypoint is missing a valid target');
+    var heading = r2(bearing(wp.location.lat, wp.location.lon, target.lat, target.lon));
+    wp.headingMode = 'fixed'; wp.heading = heading;
+    delete wp.poiCoordinate;
+    wp.actions = [rotateYaw(heading)].concat((wp.actions || []).filter(function (a) { return a.type !== 'rotateYaw'; }));
+    wp.actions.forEach(function (a, i) { a.order = i; });
+    return wp;
+  });
+}
+function toAirHub(wps) { return JSON.stringify(toManualHeadings(wps), null, 2); }
 function toKML(wps, ctx) {
   var site = 'AirHub Mission';
   var lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>', '  <name>' + site + '</name>', '  <description>Generated ' + nowISO() + '</description>', '  <Style id="wp"><IconStyle><scale>0.8</scale></IconStyle></Style>', '  <Style id="path"><LineStyle><color>ffba7c1a</color><width>2</width></LineStyle></Style>'];
@@ -720,6 +736,7 @@ function djiSettings() {
 }
 function wpmlTag(key, value) { return '<wpml:' + key + '>' + value + '</wpml:' + key + '>'; }
 function toDJIFiles(wps, ctx) {
+  wps = toManualHeadings(wps);
   var settings = djiSettings(), model = DJI_MODELS[settings.model];
   if (!model) return null;
   var t = wpmlTag, pos = model.payload ? 0 : +settings.position, payload = model.payload || +settings.payload;
