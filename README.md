@@ -233,10 +233,26 @@ Single line-icon set with consistent stroke. The Figma frame didn't ship the act
 3. Verify accent blue against the live AirHub dashboard if applicable.
 4. Replace the Lucide icon substitution with the real AirHub icon set if one exists.
 
-KMZ downloads contain `doc.kml` with the same waypoint order, coordinates, altitudes,
-and flight path as KML export, including home points when configured. The preview
-and copy controls show the KML inside the archive. This is a geographic KMZ export,
-not a DJI WPML flight mission.
+DJI KMZ downloads contain `wpmz/template.kml` and `wpmz/waylines.wpml`.
+Choose M4TD, M30T, M350 or M400 before downloading. M4TD and M30T use their
+integrated camera; M350 supports H20/H20T/H20N/H30/H30T and M400 supports
+H30/H30T in this exporter. Select the installed payload and mount.
+
+Waypoint order, speeds, POI yaw, fixed headings, gimbal pitch and photo actions
+are converted to DJI WPML. Heights are relative to takeoff: the planner's ground
+elevation is subtracted from each mission height. The takeoff location must have
+the ground elevation used in planning; this is not terrain following. No home
+point at zero altitude is inserted. Completion and RC loss return home; safe
+takeoff and RTH heights are configurable. Distance capture uses the planner's
+generated photo waypoints with reach-point actions. Preview/copy shows both XML
+files. KML remains the geographic export, and AirHub JSON/CSV retain their
+existing behavior. Controller/firmware import needs verification on the actual
+selected aircraft; no flight validation is claimed.
+
+WPML references: [DJI template](https://developer.dji.com/doc/cloud-api-tutorial/en/api-reference/dji-wpml/template-kml.html),
+[waylines](https://developer.dji.com/doc/cloud-api-tutorial/en/api-reference/dji-wpml/waylines-wpml.html),
+[common elements](https://developer.dji.com/doc/cloud-api-tutorial/en/api-reference/dji-wpml/common-element.html),
+[aircraft/payload enums](https://developer.dji.com/doc/cloud-api-tutorial/en/overview/product-support.html).
 
 ### Normal waypoint route with POI
 

@@ -407,8 +407,15 @@
         <div class="fmt-tabs" id="fmtTabs">
           <button class="fmt-tab on" data-fmt="airhub">AirHub</button>
           <button class="fmt-tab" data-fmt="kml">KML</button>
-          <button class="fmt-tab" data-fmt="kmz" title="KML waypoints and path in a KMZ archive">KMZ</button>
+          <button class="fmt-tab" data-fmt="kmz" title="DJI route with template.kml and waylines.wpml">DJI KMZ</button>
           <button class="fmt-tab" data-fmt="csv">CSV</button>
+        </div>
+        <div id="djiOptions" class="group" style="display:none">
+          <div class="field"><label for="djiModel">DJI aircraft</label><select id="djiModel"><option value="">Select aircraft</option><option value="m4td">Matrice 4TD</option><option value="m30t">Matrice 30T</option><option value="m350">Matrice 350 RTK</option><option value="m400">Matrice 400</option></select></div>
+          <div class="field" id="djiPayloadField"><label for="djiPayload">Payload</label><select id="djiPayload"><option value="82">H30</option><option value="83">H30T</option><option value="42">H20</option><option value="43">H20T</option><option value="61">H20N</option></select></div>
+          <div class="field" id="djiPositionField"><label for="djiPosition">Payload mount</label><select id="djiPosition"><option value="0">Main / left (0)</option><option value="1">Right (1)</option><option value="2">Top (2)</option></select></div>
+          <div class="grid-2"><div class="field"><label for="djiTakeoffHeight">Safe takeoff height (m)</label><input id="djiTakeoffHeight" type="number" min="1.2" max="1500" step="1" value="20"></div><div class="field"><label for="djiRTHHeight">Return home height (m)</label><input id="djiRTHHeight" type="number" min="20" max="1500" step="1" value="60"></div></div>
+          <div class="hint">Heights relative to takeoff. Finish and RC loss: return home. POI controls yaw; gimbal pitch is separate. Home is not added as a zero-height route point.</div>
         </div>
       </div>
 
